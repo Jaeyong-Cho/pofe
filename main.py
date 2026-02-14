@@ -3,50 +3,23 @@ import sys
 import json
 import os
 
-
-def ask_copilot(prompt: str, model: str = "gpt-4.1") -> str:
-    cmd = [
-        "copilot",
-        "--stream", "on",
-        "-s",
-        "--allow-all-paths",
-        "--model", model,
-        "-p", prompt
-    ]
-    
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return result.stdout.strip()
-    except subprocess.CalledProcessError as e:
-        print(f"Error running copilot cli: {e}", file=sys.stderr)
-        print(f"stderr: {e.stderr}", file=sys.stderr)
-        sys.exit(1)
-    except FileNotFoundError:
-        print("Error: 'copilot' command not found. Please ensure Copilot CLI is installed.", file=sys.stderr)
-        sys.exit(1)
+from src.ai.model import ask_ai, ask_ai_json, ask_copilot
+from src.context.context_manager import ContextManager
+from src.ai.agent import AIAgent
+from src.ai.ai_analysis_engine import AIAnalysisEngine
+from src.services.requirement_management_service import RequirementManagementService
+from src.services.architecture_design_service import ArchitectureDesignService
+from src.services.implementation_design_service import ImplementationDesignService
 
 
-def ask_ollama(prompt: str, model: str = "qwen3:14b") -> str:
-    try:
-        import ollama
-    except ImportError:
-        print("Error: ollama package not installed. Install with: pip install ollama", file=sys.stderr)
-        sys.exit(1)
-    
-    response = ollama.chat(
-        model=model,
-        messages=[{
-            'role': 'user',
-            'content': prompt
-        }]
-    )
-    
-    return response['message']['content'].strip()
+# Shared instances – all services share one ContextManager so they
+# read/write the same ``context/`` directory.
+ctx = ContextManager()
+agent = AIAgent(context_manager=ctx)
+analysis_engine = AIAnalysisEngine(context_manager=ctx)
+req_service = RequirementManagementService(context_manager=ctx)
+arch_service = ArchitectureDesignService(context_manager=ctx)
+impl_service = ImplementationDesignService(context_manager=ctx)
 
 
 def understand_project():
@@ -143,15 +116,15 @@ def understand_project():
     print("\n=== Project Summary ===")
     print(result_json.get("summary", ""))
 
-    # write summary to context/summary.json
-    if not os.path.exists("context"):
-        os.makedirs("context")
-
-    with open("context/overview.json", "w") as f:
-        json.dump({
-            "project_summary": result_json.get("summary", ""),
-            "key_files": summaries
-        }, f, indent=4)
+    # Persist via ContextManager
+    overview_data = {
+        "project_summary": result_json.get("summary", ""),
+        "key_files": summaries
+    }
+    if ctx.context_exists("overview"):
+        ctx.update_context("overview", overview_data, merge=False)
+    else:
+        ctx.create_context("overview", overview_data)
 
 
 def intent_user_input(user_input: str) -> str:
@@ -176,23 +149,19 @@ def intent_user_input(user_input: str) -> str:
         {user_input}
         </user input>
         """
-    result = ask_copilot(prompt)
-    result_json = json.loads(result)
-    intent = result_json.get("intent", "other")
+    result = ask_ai_json(prompt)
+    intent = result.get("intent", "other")
     print(f"Identified user intent: {intent}")
     
     return intent
 
 
 def ideation():
-    # read context/overview.json
-    if not os.path.exists("context/overview.json"):
+    if not ctx.context_exists("overview"):
         print("No project overview found. Please run 'understand_project' intent first.")
         return
     
-    with open("context/overview.json", "r") as f:
-        overview = json.load(f)
-
+    overview = ctx.read_context("overview")
     project_summary = overview.get("project_summary", "")
 
     prompt = f"""
@@ -222,260 +191,96 @@ def ideation():
     for idx, idea in enumerate(ideas, 1):
         print(f"{idx}. {idea}")
         
-    # write ideas to context/ideas.json
-    if not os.path.exists("context"):
-        os.makedirs("context")
-        
-    with open("context/ideas.json", "w") as f:
-        json.dump({
-            "ideas": ideas
-        }, f, indent=4)
+    # Persist via ContextManager
+    ideas_data = {"ideas": ideas}
+    if ctx.context_exists("ideas"):
+        ctx.update_context("ideas", ideas_data, merge=False)
+    else:
+        ctx.create_context("ideas", ideas_data)
 
 
 def analysis_requirements(user_input: str):
-    if not os.path.exists("context/overview.json"):
+    if not ctx.context_exists("overview"):
         understand_project()
         
-    with open("context/overview.json", "r") as f:
-        overview = json.load(f)
-    
-    if not os.path.exists("context/requirements.json"):
-        requirements = None
-    else:
-        with open("context/requirements.json", "r") as f:
-            requirements = json.load(f)
+    overview = ctx.read_context("overview")
+    current_requirements = req_service.get_all()
 
-    prompt = f"""
-        You are an expert in software engineering.
-        Please analyze the requirements for implementing a new feature based on the following project overview and existing requirements. 
-        If there are no existing requirements, please generate new requirements based on the project overview.
-        Return should be in this format:
-        {{
-            "requirements": [
-                {{
-                    "title": "User Authentication",
-                    "description": "The system shall provide a secure user authentication mechanism that allows users to register, log in, and manage their accounts. Passwords should be hashed and salted for security.",
-                    "tags": ["authentication", "security", "user management"],
-                    "status": "new" or "in progress" or "done"
-                }},
-                {{
-                    "title": "Task Management",
-                    "description": "The system shall allow users to create, edit, delete, and view tasks. Each task should have a title, description, due date, and priority level.",
-                    "tags": ["task management", "CRUD", "user interface"],
-                    "status": "new" or "in progress" or "done"
-                }}
-            ]
-        }}
+    # Use AIAnalysisEngine to analyse the feature and propose changes
+    changes = analysis_engine.analyze_feature_description(
+        feature_description=user_input,
+        current_requirements=current_requirements,
+    )
 
-        <project overview>
-        {overview.get("project_summary", "")}
-        </project overview>
-        
-        <existing requirements>
-        {json.dumps(requirements, indent=4) if requirements else "No existing requirements."}
-        </existing requirements>
+    # Apply changes through RequirementManagementService
+    req_service.apply_changes(changes)
 
-        <user suggested feature>
-        {user_input}
-        </user suggested feature>
-        """
-    
-    result = ask_copilot(prompt)
-    new_requirements = json.loads(result).get("requirements", [])
-
-    with open("context/requirements.json", "w") as f:
-        json.dump(json.loads(result), f, indent=4)
+    # Retrieve the updated requirements
+    updated = req_service.get_all()
 
     print("\n=== Analyzed Requirements for New Feature ===")
-    print(result)
+    print(json.dumps(updated, indent=4))
 
-    return new_requirements
+    return updated
 
 
 def design_software_architecture(requirements):
-    for req in requirements:
-        prompt = f"""
-            You are an expert in software engineering.
-            Please design a software architecture for implementing the following requirements. 
-            The architecture should include the main components, their responsibilities, and how they interact with each other. 
-            Return should be in this format:
-            {{
-                "components": [
-                    {{
-                        "component": "AuthenticationService",
-                        "responsibilities": "Handles user registration, login, and account management. Ensures secure authentication and authorization.",
-                        "interactions": [
-                            {{
-                                "TaskManagementService": "Receives user authentication status and permissions to control access to task management features."
-                            }}
-                        ]
-                    }},
-                    {{
-                        "component": "TaskManagementService",
-                        "responsibilities": "Manages task creation, editing, deletion, and retrieval. Handles task prioritization and due dates.",
-                        "interactions": [
-                            {{
-                                "User Interface": "Receives user input for task management operations."
-                            }},
-                            {{
-                                "Database": "Stores and retrieves task data."
-                            }}
-                        ]
-                    }}
-                ],
-                "behaviors": [
-                    {{
-                        "senario": "User Registration",
-                        "steps": [
-                            "User -> User Interface: Submits registration form.",
-                            "User Interface -> AuthenticationService: Sends registration data.",
-                            "AuthenticationService -> Database: Stores user data.",
-                            "AuthenticationService -> User Interface: Returns success response."
-                        ]
-                    }},
-                    {{
-                        "senario": "Task Creation",
-                        "steps": [
-                            "User -> User Interface: Submits new task form.",
-                            "User Interface -> TaskManagementService: Sends task data.",
-                            "TaskManagementService -> Database: Stores task data.",
-                            "TaskManagementService -> User Interface: Returns success response."
-                        ]
-                    }},
-                ]
-            }}
+    # Get current architecture (or empty)
+    current_arch = arch_service.get_architecture()
 
-            <requirements>
-            {json.dumps(req, indent=4)}
-            </requirements>
-            """
-        
-        result = ask_copilot(prompt)
-        result_json = json.loads(result)
-        architecture = result_json
+    # Wrap requirements as "create" changes for architectural analysis
+    req_changes = [{"action": "create", "requirement": r} for r in requirements]
+
+    # Detect architectural impact via AIAnalysisEngine
+    arch_changes = analysis_engine.detect_architectural_impact(
+        requirement_changes=req_changes,
+        current_architecture=current_arch,
+    )
+
+    # Apply changes through ArchitectureDesignService
+    result = arch_service.update_architecture(arch_changes)
+    architecture = result["architecture"]
 
     print("\n=== Designed Software Architecture ===")
-    print(result)
-
-    with open("context/architecture.json", "w") as f:
-        json.dump({
-            "architecture": architecture
-        }, f, indent=4)
+    print(json.dumps(architecture, indent=4))
 
     return architecture
 
 
-def implementation(archtecture):
-    if not os.path.exists("context/architecture.json"):
+def design_implementation(architecture):
+    """Design implementation-level functions for each component."""
+    if not ctx.context_exists("architecture"):
         print("No architecture design found. Please run 'design_software_architecture' first.")
         return
-    else:
-        with open("context/architecture.json", "r") as f:
-            architecture = json.load(f).get("architecture", {})
 
-    if not os.path.exists("context/requirements.json"):
-        print("No requirements found. Please run 'analysis_requirements' first.")
-        return
-    else:
-        with open("context/requirements.json", "r") as f:
-            requirements = json.load(f).get("requirements", [])
-    
-    if not os.path.exists("context/overview.json"):
-        print("No project overview found. Please run 'understand_project' first.")
-        return
-    else:
-        with open("context/overview.json", "r") as f:
-            overview = json.load(f)
-    
-    if not os.path.exists("context/implementation.json"):
-        pass
-    else:
-        with open("context/implementation.json", "r") as f:
-            implementation = json.load(f)
-    
-    prompt = f"""
-        You are an expert in software engineering.
-        Please plan implementation functions for the following software architecture and requirements. 
-        The code should be organized according to the architecture design and should meet the specified requirements. 
-        Return should be in this format:
-        {{
-            "implementation": [
-                {{
-                    "files: [
-                        {{
-                            "path": "src/services/AuthenticationService.py",
-                            "component: "AuthenticationService",
-                            "functions": [
-                                {{
-                                    "name": "register_user",
-                                    "description": "Handles user registration by validating input and storing user data securely.",
-                                    "input": "User registration data",
-                                    "processing": "The function takes user registration data as input, validates it, hashes the password, and stores the user information in the database. It also returns a success response upon successful registration."
-                                    "output": "Success response indicating that the user has been registered successfully."
-                                }},
-                                {{
-                                    "name": "login_user",
-                                    "description": "Handles user login by verifying credentials and managing session tokens."
-                                    "input": "User login credentials",
-                                    "processing": "The function takes user login credentials as input, verifies them against stored user data, and if valid, generates a session token for the user. It also returns a success response with the session token upon successful login."
-                                    "output": "Success response containing the session token for the user."
-                                }}
-                            ]
-                        }},
-                        {{
-                            "path": "src/services/TaskManagementService.py",
-                            "component: "TaskManagementService",
-                            "functions": [
-                                {{
-                                    "name": "create_task",
-                                    "description": "Handles task creation by validating input and storing task data."
-                                    "input": "Task data including title, description, due date, and priority level",
-                                    "processing": "The function takes task data as input, validates it, and stores the task information in the database. It also returns a success response upon successful task creation."
-                                    "output": "Success response indicating that the task has been created successfully."
-                                }},
-                                {{
-                                    "name": "edit_task",
-                                    "description": "Handles task editing by validating input and updating task data."
-                                    "input": "Updated task data including task ID, title, description, due date, and priority level",
-                                    "processing": "The function takes updated task data as input, validates it, and updates the task information in the database based on the task ID. It also returns a success response upon successful task editing."
-                                    "output": "Success response indicating that the task has been edited successfully."
-                                }}
-                            ]
-                        }}
-                    ]
-                }}
-            ]
-        }}
+    arch = arch_service.get_architecture()
+    requirements = req_service.get_all()
+    components = arch.get("components", [])
 
-        <project overview>
-        {overview.get("project_summary", "")}
-        </project overview>
-        
-        <architecture design>
-        {json.dumps(architecture, indent=4)}
-        </architecture design>
+    # Notify which components need implementation design
+    component_names = [c["component"] for c in components]
+    affected = arch_service.notify_component_changes(component_names)
 
-        <requirements>
-        {json.dumps(requirements, indent=4)}
-        </requirements>
-        """
-    
-    result = ask_copilot(prompt)
-    result_json = json.loads(result)
-    implementation = result_json
+    print(f"\n=== Designing implementation for {len(affected)} component(s) ===")
 
-    with open("context/implementation.json", "w") as f:
-        json.dump({
-            "implementation": implementation
-        }, f, indent=4)
+    for comp in affected:
+        print(f"  Designing: {comp['component']}...")
+        impl_service.design_functions_for_component(
+            component=comp,
+            architecture=arch,
+            requirements=requirements,
+        )
+
+    # Show the full implementation design
+    design = impl_service.provide_implementation_design()
+    print("\n=== Implementation Design ===")
+    print(json.dumps(design, indent=4))
 
 
 def handle_new_feature(user_input):
     new_requirements = analysis_requirements(user_input)
     architecture = design_software_architecture(new_requirements)
-    implementation(architecture)
-    # test
-    # validate
+    design_implementation(architecture)
 
 
 def main():
@@ -496,8 +301,21 @@ def main():
         print("You want to refactor code. This functionality is not implemented yet.")
     elif intent == "ideation":
         ideation()
+    elif intent == "query":
+        # Direct AI agent query using all available context
+        response = agent.answer_query(user_input)
+        print("\n=== AI Agent Response ===")
+        print(response)
+    elif intent == "summary":
+        # Generate project summary
+        summary = agent.summarize_project()
+        print("\n=== Project Summary ===")
+        print(summary)
     else:
-        print("Your intent does not fit into any of the predefined categories. Please try again with a clearer intent.")
+        # Fall back to AI agent for anything else
+        response = agent.answer_query(user_input)
+        print("\n=== AI Agent Response ===")
+        print(response)
 
 
 if __name__ == "__main__":
