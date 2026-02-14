@@ -254,13 +254,13 @@ def analysis_requirements(user_input: str):
             "requirements": [
                 {{
                     "title": "User Authentication",
-                    "description": "Implement a secure user authentication system that allows users to register, log in, and manage their accounts.",
+                    "description": "The system shall provide a secure user authentication mechanism that allows users to register, log in, and manage their accounts. Passwords should be hashed and salted for security.",
                     "tags": ["authentication", "security", "user management"],
                     "status": "new" or "in progress" or "done"
                 }},
                 {{
                     "title": "Task Management",
-                    "description": "Create a task management feature that allows users to create, edit, and delete tasks. Tasks should have due dates and priority levels.",
+                    "description": "The system shall allow users to create, edit, delete, and view tasks. Each task should have a title, description, due date, and priority level.",
                     "tags": ["task management", "CRUD", "user interface"],
                     "status": "new" or "in progress" or "done"
                 }}
