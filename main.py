@@ -293,64 +293,67 @@ def analysis_requirements(user_input: str):
 
 
 def design_software_architecture(requirements):
-    prompt = f"""
-        You are an expert in software engineering.
-        Please design a software architecture for implementing the following requirements. 
-        The architecture should include the main components, their responsibilities, and how they interact with each other. 
-        Return should be in this format:
-        {{
-            "components": [
-                {{
-                    "component": "AuthenticationService",
-                    "responsibilities": "Handles user registration, login, and account management. Ensures secure authentication and authorization.",
-                    "interactions": [
-                        {{
-                            "TaskManagementService": "Receives user authentication status and permissions to control access to task management features."
-                        }}
-                    ]
-                }},
-                {{
-                    "component": "TaskManagementService",
-                    "responsibilities": "Manages task creation, editing, deletion, and retrieval. Handles task prioritization and due dates.",
-                    "interactions": [
-                        {{
-                            "User Interface": "Receives user input for task management operations."
-                        }},
-                        {{
-                            "Database": "Stores and retrieves task data."
-                        }}
-                    ]
-                }}
-            ],
-            "behaviors": [
-                {{
-                    "senario": "User Registration",
-                    "steps": [
-                        "User -> User Interface: Submits registration form.",
-                        "User Interface -> AuthenticationService: Sends registration data.",
-                        "AuthenticationService -> Database: Stores user data.",
-                        "AuthenticationService -> User Interface: Returns success response."
-                    ]
-                }},
-                {{
-                    "senario": "Task Creation",
-                    "steps": [
-                        "User -> User Interface: Submits new task form.",
-                        "User Interface -> TaskManagementService: Sends task data.",
-                        "TaskManagementService -> Database: Stores task data.",
-                        "TaskManagementService -> User Interface: Returns success response."
-                    ]
-                }},
-            ]
-        }}
+    for req in requirements:
+        prompt = f"""
+            You are an expert in software engineering.
+            Please design a software architecture for implementing the following requirements. 
+            The architecture should include the main components, their responsibilities, and how they interact with each other. 
+            Return should be in this format:
+            {{
+                "components": [
+                    {{
+                        "component": "AuthenticationService",
+                        "responsibilities": "Handles user registration, login, and account management. Ensures secure authentication and authorization.",
+                        "interactions": [
+                            {{
+                                "TaskManagementService": "Receives user authentication status and permissions to control access to task management features."
+                            }}
+                        ]
+                    }},
+                    {{
+                        "component": "TaskManagementService",
+                        "responsibilities": "Manages task creation, editing, deletion, and retrieval. Handles task prioritization and due dates.",
+                        "interactions": [
+                            {{
+                                "User Interface": "Receives user input for task management operations."
+                            }},
+                            {{
+                                "Database": "Stores and retrieves task data."
+                            }}
+                        ]
+                    }}
+                ],
+                "behaviors": [
+                    {{
+                        "senario": "User Registration",
+                        "steps": [
+                            "User -> User Interface: Submits registration form.",
+                            "User Interface -> AuthenticationService: Sends registration data.",
+                            "AuthenticationService -> Database: Stores user data.",
+                            "AuthenticationService -> User Interface: Returns success response."
+                        ]
+                    }},
+                    {{
+                        "senario": "Task Creation",
+                        "steps": [
+                            "User -> User Interface: Submits new task form.",
+                            "User Interface -> TaskManagementService: Sends task data.",
+                            "TaskManagementService -> Database: Stores task data.",
+                            "TaskManagementService -> User Interface: Returns success response."
+                        ]
+                    }},
+                ]
+            }}
 
-        <requirements>
-        {json.dumps(requirements, indent=4)}
-        </requirements>
-        """
-    
-    result = ask_copilot(prompt)
-    architecture = json.loads(result)
+            <requirements>
+            {json.dumps(req, indent=4)}
+            </requirements>
+            """
+        
+        result = ask_copilot(prompt)
+        result_json = json.loads(result)
+        architecture = result_json
+
     print("\n=== Designed Software Architecture ===")
     print(result)
 
@@ -362,10 +365,115 @@ def design_software_architecture(requirements):
     return architecture
 
 
+def implementation(archtecture):
+    if not os.path.exists("context/architecture.json"):
+        print("No architecture design found. Please run 'design_software_architecture' first.")
+        return
+    else:
+        with open("context/architecture.json", "r") as f:
+            architecture = json.load(f).get("architecture", {})
+
+    if not os.path.exists("context/requirements.json"):
+        print("No requirements found. Please run 'analysis_requirements' first.")
+        return
+    else:
+        with open("context/requirements.json", "r") as f:
+            requirements = json.load(f).get("requirements", [])
+    
+    if not os.path.exists("context/overview.json"):
+        print("No project overview found. Please run 'understand_project' first.")
+        return
+    else:
+        with open("context/overview.json", "r") as f:
+            overview = json.load(f)
+    
+    if not os.path.exists("context/implementation.json"):
+        pass
+    else:
+        with open("context/implementation.json", "r") as f:
+            implementation = json.load(f)
+    
+    prompt = f"""
+        You are an expert in software engineering.
+        Please plan implementation functions for the following software architecture and requirements. 
+        The code should be organized according to the architecture design and should meet the specified requirements. 
+        Return should be in this format:
+        {{
+            "implementation": [
+                {{
+                    "files: [
+                        {{
+                            "path": "src/services/AuthenticationService.py",
+                            "component: "AuthenticationService",
+                            "functions": [
+                                {{
+                                    "name": "register_user",
+                                    "description": "Handles user registration by validating input and storing user data securely.",
+                                    "input": "User registration data",
+                                    "processing": "The function takes user registration data as input, validates it, hashes the password, and stores the user information in the database. It also returns a success response upon successful registration."
+                                    "output": "Success response indicating that the user has been registered successfully."
+                                }},
+                                {{
+                                    "name": "login_user",
+                                    "description": "Handles user login by verifying credentials and managing session tokens."
+                                    "input": "User login credentials",
+                                    "processing": "The function takes user login credentials as input, verifies them against stored user data, and if valid, generates a session token for the user. It also returns a success response with the session token upon successful login."
+                                    "output": "Success response containing the session token for the user."
+                                }}
+                            ]
+                        }},
+                        {{
+                            "path": "src/services/TaskManagementService.py",
+                            "component: "TaskManagementService",
+                            "functions": [
+                                {{
+                                    "name": "create_task",
+                                    "description": "Handles task creation by validating input and storing task data."
+                                    "input": "Task data including title, description, due date, and priority level",
+                                    "processing": "The function takes task data as input, validates it, and stores the task information in the database. It also returns a success response upon successful task creation."
+                                    "output": "Success response indicating that the task has been created successfully."
+                                }},
+                                {{
+                                    "name": "edit_task",
+                                    "description": "Handles task editing by validating input and updating task data."
+                                    "input": "Updated task data including task ID, title, description, due date, and priority level",
+                                    "processing": "The function takes updated task data as input, validates it, and updates the task information in the database based on the task ID. It also returns a success response upon successful task editing."
+                                    "output": "Success response indicating that the task has been edited successfully."
+                                }}
+                            ]
+                        }}
+                    ]
+                }}
+            ]
+        }}
+
+        <project overview>
+        {overview.get("project_summary", "")}
+        </project overview>
+        
+        <architecture design>
+        {json.dumps(architecture, indent=4)}
+        </architecture design>
+
+        <requirements>
+        {json.dumps(requirements, indent=4)}
+        </requirements>
+        """
+    
+    result = ask_copilot(prompt)
+    result_json = json.loads(result)
+    implementation = result_json
+
+    with open("context/implementation.json", "w") as f:
+        json.dump({
+            "implementation": implementation
+        }, f, indent=4)
+
+
 def handle_new_feature(user_input):
     new_requirements = analysis_requirements(user_input)
-    design_software_architecture(new_requirements)
-    # implement
+    architecture = design_software_architecture(new_requirements)
+    implementation(architecture)
     # test
     # validate
 
