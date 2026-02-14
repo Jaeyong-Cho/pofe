@@ -154,9 +154,7 @@ def understand_project():
         }, f, indent=4)
 
 
-def intent_user_input():
-    print("What do you want?.")
-    user_input = input(">> ")
+def intent_user_input(user_input: str) -> str:
 
     prompt = f"""
         You are expert of software engineering.
@@ -234,14 +232,84 @@ def ideation():
         }, f, indent=4)
 
 
+def analysis_requirements(user_input):
+    if not os.path.exists("context/overview.json"):
+        understand_project()
+        
+    with open("context/overview.json", "r") as f:
+        overview = json.load(f)
+    
+    if not os.path.exists("context/requirements.json"):
+        requirements = None
+    else:
+        with open("context/requirements.json", "r") as f:
+            requirements = json.load(f)
+
+    prompt = f"""
+        You are expert of software engineering.
+        Please analyze the requirements for implementing a new feature based on the following project overview and existing requirements. 
+        If there are no existing requirements, please generate new requirements based on the project overview.
+        Return should be in this format:
+        {{
+            "requirements": [
+                {{
+                    "title": "User Authentication",
+                    "description": "Implement a secure user authentication system that allows users to register, log in, and manage their accounts.",
+                    "tags": ["authentication", "security", "user management"],
+                    "status": "new" or "in progress" or "done"
+                }},
+                {{
+                    "title": "Task Management",
+                    "description": "Create a task management feature that allows users to create, edit, and delete tasks. Tasks should have due dates and priority levels.",
+                    "tags": ["task management", "CRUD", "user interface"],
+                    "status": "new" or "in progress" or "done"
+                }}
+            ]
+        }}
+
+        <project overview>
+        {overview.get("project_summary", "")}
+        </project overview>
+        
+        <existing requirements>
+        {json.dumps(requirements, indent=4) if requirements else "No existing requirements."}
+        </existing requirements>
+
+        <user suggested feature>
+        {user_input}
+        </user suggested feature>
+        """
+    
+    result = ask_copilot(prompt)
+
+    with open("context/requirements.json", "w") as f:
+        json.dump(json.loads(result), f, indent=4)
+
+    print("\n=== Analyzed Requirements for New Feature ===")
+    print(result)
+
+    return
+
+
+def handle_new_feature(user_input):
+    analysis_requirements(user_input)
+    # design software architecture
+    # implement
+    # test
+    # validate
+    pass
+
+
 def main():
     print("Welcome to pofe - Source Code Understanding Tool!")
+    print("What do you want?.")
+    user_input = input(">> ")
 
-    intent = intent_user_input()
+    intent = intent_user_input(user_input)
     if intent == "understand_project":
         understand_project()
     elif intent == "new_feature":
-        print("You want to add a new feature. This functionality is not implemented yet.")
+        handle_new_feature(user_input)
     elif intent == "bug_fix":
         print("You want to fix a bug. This functionality is not implemented yet.")
     elif intent == "code_refactor":
