@@ -141,7 +141,8 @@ def intent_user_input(user_input: str) -> str:
         4. bug_fix: The user wants to fix a bug in the project.
         5. code_refactor: The user wants to refactor existing code for better readability or performance.
         6. ideation: The user wants to ideate on the project.
-        7. other: The user's intent does not fit into any of the above categories.
+        7. dump_context: The user wants to export or dump all context data to JSON files.
+        8. other: The user's intent does not fit into any of the above categories.
 
         Return should be in this format:
         {{
@@ -293,6 +294,17 @@ def initialize_project():
     print("The AI agent can now use this context for coding assistance.")
 
 
+def dump_context():
+    """Export all stored context from SQLite to individual JSON files."""
+    written = ctx.dump_to_json()
+    if not written:
+        print("No contexts to dump.")
+        return
+    print(f"\n=== Dumped {len(written)} context(s) to JSON ===")
+    for path in written:
+        print(f"  ✓ {path}")
+
+
 def main():
     print("Welcome to pofe - Source Code Understanding Tool!")
     print("What do you want?.")
@@ -313,6 +325,8 @@ def main():
         print("You want to refactor code. This functionality is not implemented yet.")
     elif intent == "ideation":
         ideation()
+    elif intent == "dump_context":
+        dump_context()
     elif intent == "query":
         # Direct AI agent query using all available context
         response = agent.answer_query(user_input)
