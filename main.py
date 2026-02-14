@@ -84,7 +84,7 @@ def understand_project():
         </workspace tree>
     """
 
-    result = ask_ollama(prompt)
+    result = ask_copilot(prompt)
     print("\n" + "="*80)
     print(result)
     print("="*80)
@@ -117,7 +117,7 @@ def understand_project():
             </file content>
             """
 
-        result = ask_ollama(prompt)
+        result = ask_copilot(prompt)
         result_json = json.loads(result)
         summaries[file_path] = result_json.get("summary", "")
     
@@ -138,7 +138,7 @@ def understand_project():
         </key file summaries>
         """
     
-    result = ask_ollama(prompt)
+    result = ask_copilot(prompt)
     result_json = json.loads(result)
     print("\n=== Project Summary ===")
     print(result_json.get("summary", ""))
@@ -153,10 +153,52 @@ def understand_project():
             "key_files": summaries
         }, f, indent=4)
 
+
+def intent_user_input():
+    print("What do you want?.")
+    user_input = input(">> ")
+
+    prompt = f"""
+        You are expert of software engineering.
+        
+        Please categorize the user's intent into one of the following categories:
+        1. unserstand_project: The user wants to understand the overall project structure and key files.
+        2. new_feature: The user wants to add a new feature to the project.
+        3. bug_fix: The user wants to fix a bug in the project.
+        4. code_refactor: The user wants to refactor existing code for better readability or performance.
+        5. other: The user's intent does not fit into any of the above categories.
+
+        Return should be in this format:
+        {{
+            "intent": "understand_project"
+        }}
+
+        <user input>
+        {user_input}
+        </user input>
+        """
+    result = ask_copilot(prompt)
+    result_json = json.loads(result)
+    intent = result_json.get("intent", "other")
+    print(f"Identified user intent: {intent}")
+    
+    return intent
+
+
 def main():
     print("Welcome to pofe - Source Code Understanding Tool!")
 
-    understand_project()
+    intent = intent_user_input()
+    if intent == "understand_project":
+        understand_project()
+    elif intent == "new_feature":
+        print("You want to add a new feature. This functionality is not implemented yet.")
+    elif intent == "bug_fix":
+        print("You want to fix a bug. This functionality is not implemented yet.")
+    elif intent == "code_refactor":
+        print("You want to refactor code. This functionality is not implemented yet.")
+    else:
+        print("Your intent does not fit into any of the predefined categories. Please try again with a clearer intent.")
 
 
 if __name__ == "__main__":
