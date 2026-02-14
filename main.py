@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import json
+import os
 
 
 def ask_copilot(prompt: str, model: str = "gpt-4.1") -> str:
@@ -141,6 +142,16 @@ def understand_project():
     result_json = json.loads(result)
     print("\n=== Project Summary ===")
     print(result_json.get("summary", ""))
+
+    # write summary to context/summary.json
+    if not os.path.exists("context"):
+        os.makedirs("context")
+
+    with open("context/overview.json", "w") as f:
+        json.dump({
+            "project_summary": result_json.get("summary", ""),
+            "key_files": summaries
+        }, f, indent=4)
 
 def main():
     print("Welcome to pofe - Source Code Understanding Tool!")

@@ -1,0 +1,7 @@
+{
+    "project_summary": "This project is a Python-based source code understanding tool named 'pofe'. Its main functionality is to analyze a project's structure and contents using AI models (Copilot CLI and Ollama), generate summaries of key files, and produce an overall project summary in JSON format. The tool is configured via pyproject.toml and is designed to assist developers in quickly understanding codebases.",
+    "key_files": {
+        "main.py": "This file implements the main entry point for a source code understanding tool called 'pofe'. It provides functions to interact with AI models (Copilot CLI and Ollama) to analyze the project structure, select key files, summarize their contents, and generate an overall project summary in JSON format. The results are printed and saved to a context/overview.json file for further use.",
+        "pyproject.toml": "This file defines the Python project 'pofe', specifying its name, version, description, and required Python version. It lists no mandatory dependencies but includes an optional dependency group 'ollama' with the 'ollama' package. The file serves as the project's configuration for packaging, dependencies, and metadata."
+    }
+}
