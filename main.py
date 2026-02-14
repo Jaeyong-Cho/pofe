@@ -157,7 +157,7 @@ def understand_project():
 def intent_user_input(user_input: str) -> str:
 
     prompt = f"""
-        You are expert of software engineering.
+        You are an expert in software engineering.
         
         Please categorize the user's intent into one of the following categories:
         1. unserstand_project: The user wants to understand the overall project structure and key files.
@@ -232,7 +232,7 @@ def ideation():
         }, f, indent=4)
 
 
-def analysis_requirements(user_input):
+def analysis_requirements(user_input: str):
     if not os.path.exists("context/overview.json"):
         understand_project()
         
@@ -246,7 +246,7 @@ def analysis_requirements(user_input):
             requirements = json.load(f)
 
     prompt = f"""
-        You are expert of software engineering.
+        You are an expert in software engineering.
         Please analyze the requirements for implementing a new feature based on the following project overview and existing requirements. 
         If there are no existing requirements, please generate new requirements based on the project overview.
         Return should be in this format:
@@ -281,6 +281,7 @@ def analysis_requirements(user_input):
         """
     
     result = ask_copilot(prompt)
+    new_requirements = json.loads(result).get("requirements", [])
 
     with open("context/requirements.json", "w") as f:
         json.dump(json.loads(result), f, indent=4)
@@ -288,16 +289,85 @@ def analysis_requirements(user_input):
     print("\n=== Analyzed Requirements for New Feature ===")
     print(result)
 
-    return
+    return new_requirements
+
+
+def design_software_architecture(requirements):
+    prompt = f"""
+        You are an expert in software engineering.
+        Please design a software architecture for implementing the following requirements. 
+        The architecture should include the main components, their responsibilities, and how they interact with each other. 
+        Return should be in this format:
+        {{
+            "components": [
+                {{
+                    "component": "AuthenticationService",
+                    "responsibilities": "Handles user registration, login, and account management. Ensures secure authentication and authorization.",
+                    "interactions": [
+                        {{
+                            "TaskManagementService": "Receives user authentication status and permissions to control access to task management features."
+                        }}
+                    ]
+                }},
+                {{
+                    "component": "TaskManagementService",
+                    "responsibilities": "Manages task creation, editing, deletion, and retrieval. Handles task prioritization and due dates.",
+                    "interactions": [
+                        {{
+                            "User Interface": "Receives user input for task management operations."
+                        }},
+                        {{
+                            "Database": "Stores and retrieves task data."
+                        }}
+                    ]
+                }}
+            ],
+            "dynamic_behaviors": [
+                {{
+                    "senario": "User Registration",
+                    "steps": [
+                        "User -> User Interface: Submits registration form.",
+                        "User Interface -> AuthenticationService: Sends registration data.",
+                        "AuthenticationService -> Database: Stores user data.",
+                        "AuthenticationService -> User Interface: Returns success response."
+                    ]
+                }},
+                {{
+                    "senario": "Task Creation",
+                    "steps": [
+                        "User -> User Interface: Submits new task form.",
+                        "User Interface -> TaskManagementService: Sends task data.",
+                        "TaskManagementService -> Database: Stores task data.",
+                        "TaskManagementService -> User Interface: Returns success response."
+                    ]
+                }},
+            ]
+        }}
+
+        <requirements>
+        {json.dumps(requirements, indent=4)}
+        </requirements>
+        """
+    
+    result = ask_copilot(prompt)
+    architecture = json.loads(result)
+    print("\n=== Designed Software Architecture ===")
+    print(result)
+
+    with open("context/architecture.json", "w") as f:
+        json.dump({
+            "architecture": architecture
+        }, f, indent=4)
+
+    return architecture
 
 
 def handle_new_feature(user_input):
-    analysis_requirements(user_input)
-    # design software architecture
+    new_requirements = analysis_requirements(user_input)
+    design_software_architecture(new_requirements)
     # implement
     # test
     # validate
-    pass
 
 
 def main():
