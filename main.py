@@ -322,7 +322,7 @@ def design_software_architecture(requirements):
                     ]
                 }}
             ],
-            "dynamic_behaviors": [
+            "behaviors": [
                 {{
                     "senario": "User Registration",
                     "steps": [
