@@ -31,7 +31,7 @@ def ask_copilot(prompt: str, model: str = "gpt-4.1") -> str:
         sys.exit(1)
 
 
-def ask_ollama(prompt: str, model: str = "glm4") -> str:
+def ask_ollama(prompt: str, model: str = "qwen3:14b") -> str:
     try:
         import ollama
     except ImportError:
@@ -73,7 +73,7 @@ def understand_project():
                     "path": "src/utils.py",
                     "reason": "This file contains utility functions that are used across the project."
                 }}
-            ]
+            ],
             "description": "This project is a web application built with React and Node.js. It allows users to create and manage tasks. The main components include the frontend (React) and the backend (Node.js with Express). The project also uses MongoDB for data storage."
         }}
 
@@ -84,7 +84,7 @@ def understand_project():
         </workspace tree>
     """
 
-    result = ask_copilot(prompt)
+    result = ask_ollama(prompt)
     print("\n" + "="*80)
     print(result)
     print("="*80)
@@ -117,7 +117,7 @@ def understand_project():
             </file content>
             """
 
-        result = ask_copilot(prompt)
+        result = ask_ollama(prompt)
         result_json = json.loads(result)
         summaries[file_path] = result_json.get("summary", "")
     
@@ -138,7 +138,7 @@ def understand_project():
         </key file summaries>
         """
     
-    result = ask_copilot(prompt)
+    result = ask_ollama(prompt)
     result_json = json.loads(result)
     print("\n=== Project Summary ===")
     print(result_json.get("summary", ""))
