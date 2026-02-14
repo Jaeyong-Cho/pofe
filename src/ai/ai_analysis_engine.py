@@ -244,7 +244,10 @@ Do not include any explanation or additional text.
             for cls in f.get("classes", []):
                 lookup[cls.get("name", "")] = cls.get("uid", "")
                 for mtd in cls.get("methods", []):
-                    lookup[f"{cls.get('name', '')}.{mtd.get('name', '')}"] = mtd.get("uid", "")
+                    mtd_name = mtd.get("name", "")
+                    mtd_uid = mtd.get("uid", "")
+                    lookup[f"{cls.get('name', '')}.{mtd_name}"] = mtd_uid
+                    lookup.setdefault(mtd_name, mtd_uid)
             for fn in f.get("functions", []):
                 lookup[fn.get("name", "")] = fn.get("uid", "")
         return lookup

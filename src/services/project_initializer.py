@@ -222,7 +222,10 @@ class ProjectInitializer:
             for cls in f.get("classes", []):
                 impl_lookup[cls.get("name", "")] = cls.get("uid", "")
                 for mtd in cls.get("methods", []):
-                    impl_lookup[f"{cls.get('name', '')}.{mtd.get('name', '')}"] = mtd.get("uid", "")
+                    mtd_name = mtd.get("name", "")
+                    mtd_uid = mtd.get("uid", "")
+                    impl_lookup[f"{cls.get('name', '')}.{mtd_name}"] = mtd_uid
+                    impl_lookup.setdefault(mtd_name, mtd_uid)
             for fn in f.get("functions", []):
                 impl_lookup[fn.get("name", "")] = fn.get("uid", "")
 
