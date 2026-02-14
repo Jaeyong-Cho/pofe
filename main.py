@@ -30,7 +30,7 @@ def ask_copilot(prompt: str, model: str = "gpt-4.1") -> str:
         sys.exit(1)
 
 
-def ask_ollama(prompt: str, model: str = "llama3.1:8b") -> str:
+def ask_ollama(prompt: str, model: str = "glm4") -> str:
     try:
         import ollama
     except ImportError:
@@ -46,6 +46,7 @@ def ask_ollama(prompt: str, model: str = "llama3.1:8b") -> str:
     )
     
     return response['message']['content'].strip()
+
 
 def understand_project():
     tree_result = subprocess.run(
