@@ -278,15 +278,10 @@ class ProjectInitializer:
 
     def _read_file(self, path: str) -> str | None:
         try:
-            result = subprocess.run(
-                ["cat", path],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            return result.stdout
-        except subprocess.CalledProcessError:
-            print(f"  ⚠ Could not read: {path}")
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read()
+        except (OSError, UnicodeDecodeError):
+            print(f"  ⚠ Skipping (binary or unreadable): {path}")
             return None
 
     def _extract_file_paths(self, tree_json: str) -> list[str]:

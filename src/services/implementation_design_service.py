@@ -82,10 +82,18 @@ class ImplementationDesignService:
         """
         Design detailed implementation for a single component.
 
+        Uses ``related_to`` to filter requirements to only those linked
+        to this component, reducing prompt noise.
+
         Returns a dict containing the component name and its file specs.
         """
-        reqs_block = json.dumps(requirements, indent=2) if requirements else "N/A"
         arch_uid = component.get("uid", "")
+
+        # Filter requirements to those related to this component
+        filtered_reqs = self._filter_related_requirements(
+            component, requirements or [],
+        )
+        reqs_block = json.dumps(filtered_reqs, indent=2) if filtered_reqs else "N/A"
 
         prompt = f"""You are an expert in software engineering.
 
@@ -184,3 +192,28 @@ Do not include any explanation or additional text.
         for spec in new_specs:
             by_file[spec["file"]] = spec
         self._save(list(by_file.values()))
+
+    @staticmethod
+    def _filter_related_requirements(
+        component: dict[str, Any],
+        requirements: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """
+        Return only requirements whose ``related_to`` includes this
+        component's UID, or that the component's ``related_to`` refers to.
+
+        Falls back to all requirements if no links exist.
+        """
+        arch_uid = component.get("uid", "")
+        comp_related = set(component.get("related_to", []))
+
+        filtered = []
+        for req in requirements:
+            req_uid = req.get("uid", "")
+            req_related = set(req.get("related_to", []))
+            # Requirement points to this component, or component points to this requirement
+            if arch_uid in req_related or req_uid in comp_related:
+                filtered.append(req)
+
+        # Fall back to all if no links found (avoids empty prompt)
+        return filtered if filtered else requirements

@@ -46,7 +46,13 @@ class AIAnalysisEngine:
             action      – "create" | "update" | "delete"
             requirement – the requirement dict with uid, title, description,
                           tags, status, related_to
+
+        Uses ``related_to`` traversal to include connected architecture
+        components alongside each existing requirement for richer context.
         """
+        # Enrich existing requirements with their related architecture components
+        enriched_reqs = self._enrich_with_related(current_requirements)
+
         prompt = f"""You are an expert in software engineering.
 
 Analyse the following new feature description against the current requirements.
@@ -95,9 +101,9 @@ Do not include any explanation or additional text.
 {feature_description}
 </feature description>
 
-<current requirements>
-{json.dumps(current_requirements, indent=2)}
-</current requirements>
+<current requirements with related context>
+{json.dumps(enriched_reqs, indent=2)}
+</current requirements with related context>
 """
         result = ask_ai_json(prompt, backend=self._backend)
         changes = result.get("changes", [])
@@ -118,10 +124,17 @@ Do not include any explanation or additional text.
         """
         Detect architectural impact of requirement changes.
 
+        Uses ``related_to`` traversal to include connected implementation
+        items for each architecture component, giving the AI a clearer
+        picture of what already exists.
+
         Returns a list of architectural change suggestions, each with:
             action    – "create" | "update" | "delete"
             component – the component dict with uid, related_to
         """
+        # Enrich architecture components with related implementation items
+        enriched_arch = self._enrich_architecture_with_related(current_architecture)
+
         prompt = f"""You are an expert in software engineering.
 
 Analyse the following requirement changes and determine their impact on the
@@ -166,9 +179,9 @@ Do not include any explanation or additional text.
 {json.dumps(requirement_changes, indent=2)}
 </requirement changes>
 
-<current architecture>
-{json.dumps(current_architecture, indent=2)}
-</current architecture>
+<current architecture with related context>
+{json.dumps(enriched_arch, indent=2)}
+</current architecture with related context>
 """
         result = ask_ai_json(prompt, backend=self._backend)
         changes = result.get("changes", [])
@@ -180,6 +193,64 @@ Do not include any explanation or additional text.
     # ------------------------------------------------------------------
     # UID assignment and related_to resolution
     # ------------------------------------------------------------------
+
+    def _enrich_with_related(
+        self, requirements: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """
+        Enrich each requirement with its related architecture components.
+
+        Returns a new list where each requirement has an additional
+        ``_related_components`` field with the resolved items.
+        """
+        enriched = []
+        for req in requirements:
+            entry = dict(req)
+            uid = req.get("uid", "")
+            if uid:
+                bundle = self._ctx.gather_related(uid, depth=1)
+                related_comps = [
+                    {"component": item.get("component", ""), "responsibilities": item.get("responsibilities", "")}
+                    for ref_uid, item in bundle.get("related", {}).items()
+                    if ref_uid.startswith("arch-")
+                ]
+                if related_comps:
+                    entry["_related_components"] = related_comps
+            enriched.append(entry)
+        return enriched
+
+    def _enrich_architecture_with_related(
+        self, architecture: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Enrich each architecture component with its related implementation
+        items and requirements.
+
+        Returns a new architecture dict where each component has additional
+        ``_related_impl`` and ``_related_reqs`` fields.
+        """
+        enriched_components = []
+        for comp in architecture.get("components", []):
+            entry = dict(comp)
+            uid = comp.get("uid", "")
+            if uid:
+                bundle = self._ctx.gather_related(uid, depth=1)
+                related_impl = []
+                related_reqs = []
+                for ref_uid, item in bundle.get("related", {}).items():
+                    if ref_uid.startswith("req-"):
+                        related_reqs.append({"title": item.get("title", ""), "description": item.get("description", "")})
+                    elif ref_uid.startswith(("cls-", "mtd-", "fn-")):
+                        related_impl.append({"name": item.get("name", ""), "purpose": item.get("purpose", "")})
+                if related_impl:
+                    entry["_related_impl"] = related_impl
+                if related_reqs:
+                    entry["_related_reqs"] = related_reqs
+            enriched_components.append(entry)
+        return {
+            "components": enriched_components,
+            "behaviors": architecture.get("behaviors", []),
+        }
 
     def _resolve_requirement_changes(
         self, changes: list[dict[str, Any]],
