@@ -217,13 +217,21 @@ def analysis_requirements(user_input: str):
         current_requirements=current_requirements,
     )
 
+    print("\n=== Requirement Analysis Results ===")
+    for change in changes:
+        action = change.get("action", "?")
+        req = change.get("requirement", {})
+        title = req.get("title", "untitled")
+        print(f"  [{action.upper()}] {title}")
+        if req.get("description"):
+            print(f"         {req['description'][:120]}")
+    print()
+
     # Apply changes through RequirementManagementService
     req_service.apply_changes(changes)
 
     # Retrieve the updated requirements
     updated = req_service.get_all()
-
-    print("\n=== Requirements Updated ===")
     return updated
 
 
@@ -240,11 +248,19 @@ def design_software_architecture(requirements):
         current_architecture=current_arch,
     )
 
+    print("\n=== Architecture Analysis Results ===")
+    for change in arch_changes:
+        action = change.get("action", "?")
+        comp = change.get("component", {})
+        name = comp.get("component", "unnamed")
+        print(f"  [{action.upper()}] {name}")
+        for resp in (comp.get("responsibilities") or [])[:3]:
+            print(f"         - {resp}")
+    print()
+
     # Apply changes through ArchitectureDesignService
     result = arch_service.update_architecture(arch_changes)
     architecture = result["architecture"]
-
-    print("\n=== Architecture Updated ===")
     return architecture
 
 
@@ -266,22 +282,91 @@ def design_implementation(architecture):
 
     for comp in affected:
         print(f"  Designing: {comp['component']}...")
-        impl_service.design_functions_for_component(
+        result = impl_service.design_functions_for_component(
             component=comp,
             architecture=arch,
             requirements=requirements,
         )
 
-    # Show the full implementation design
-    design = impl_service.provide_implementation_design()
-    print("\n=== Implementation Design ===")
-    print(json.dumps(design, indent=4))
+        # Show per-component implementation results
+        print(f"\n  --- {comp['component']} ---")
+        for fspec in result.get("files", []):
+            print(f"    File: {fspec.get('file', '?')}")
+            for cls in fspec.get("classes", []):
+                print(f"      class {cls.get('name', '?')}")
+                for mtd in cls.get("methods", []):
+                    print(f"        .{mtd.get('name', '?')}() — {mtd.get('purpose', '')}")
+            for fn in fspec.get("functions", []):
+                print(f"      fn {fn.get('name', '?')}() — {fn.get('purpose', '')}")
+        print()
+
+
+def _print_analysis_summary():
+    """Print a consolidated summary of all new items across every layer."""
+    reqs = req_service.get_all()
+    arch = arch_service.get_architecture()
+    impl = impl_service.provide_implementation_design()
+
+    new_reqs = [r for r in reqs if r.get("status") == "new"]
+    components = arch.get("components", [])
+    new_comps = [c for c in components if c.get("status") == "new"]
+
+    new_cls, new_mtd, new_fn = 0, 0, 0
+    for f in impl:
+        for cls in f.get("classes", []):
+            if cls.get("status") == "new":
+                new_cls += 1
+            for mtd in cls.get("methods", []):
+                if mtd.get("status") == "new":
+                    new_mtd += 1
+        for fn in f.get("functions", []):
+            if fn.get("status") == "new":
+                new_fn += 1
+
+    print("=" * 60)
+    print("  ANALYSIS SUMMARY")
+    print("=" * 60)
+
+    print(f"\n  Requirements: {len(new_reqs)} new / {len(reqs)} total")
+    for r in new_reqs:
+        print(f"    [{r.get('uid', '?')}] {r.get('title', '?')}")
+
+    print(f"\n  Architecture: {len(new_comps)} new / {len(components)} total")
+    for c in new_comps:
+        print(f"    [{c.get('uid', '?')}] {c.get('component', '?')}")
+
+    print(f"\n  Implementation: {new_cls} classes, {new_mtd} methods, {new_fn} functions (new)")
+    for f in impl:
+        has_new = any(
+            cls.get("status") == "new"
+            or any(m.get("status") == "new" for m in cls.get("methods", []))
+            for cls in f.get("classes", [])
+        ) or any(fn.get("status") == "new" for fn in f.get("functions", []))
+        if not has_new:
+            continue
+        print(f"    {f.get('file', '?')}")
+        for cls in f.get("classes", []):
+            if cls.get("status") == "new":
+                print(f"      + class {cls.get('name', '?')}")
+            for mtd in cls.get("methods", []):
+                if mtd.get("status") == "new":
+                    print(f"        + .{mtd.get('name', '?')}()")
+        for fn in f.get("functions", []):
+            if fn.get("status") == "new":
+                print(f"      + fn {fn.get('name', '?')}()")
+
+    total_new = len(new_reqs) + len(new_comps) + new_cls + new_mtd + new_fn
+    print(f"\n  Total new items: {total_new}  (run 'review' to approve them)")
+    print("=" * 60)
 
 
 def handle_new_feature(user_input):
     new_requirements = analysis_requirements(user_input)
     architecture = design_software_architecture(new_requirements)
     design_implementation(architecture)
+
+    # Show total analysis summary
+    _print_analysis_summary()
 
 
 def initialize_project():
