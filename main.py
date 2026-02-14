@@ -160,7 +160,7 @@ def intent_user_input(user_input: str) -> str:
         You are an expert in software engineering.
         
         Please categorize the user's intent into one of the following categories:
-        1. unserstand_project: The user wants to understand the overall project structure and key files.
+        1. understand_project: The user wants to understand the overall project structure and key files.
         2. new_feature: The user wants to add a new feature to the project.
         3. bug_fix: The user wants to fix a bug in the project.
         4. code_refactor: The user wants to refactor existing code for better readability or performance.
@@ -376,6 +376,8 @@ def main():
     user_input = input(">> ")
 
     intent = intent_user_input(user_input)
+    intent = intent.lower()
+
     if intent == "understand_project":
         understand_project()
     elif intent == "new_feature":
