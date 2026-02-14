@@ -10,6 +10,7 @@ from src.ai.ai_analysis_engine import AIAnalysisEngine
 from src.services.requirement_management_service import RequirementManagementService
 from src.services.architecture_design_service import ArchitectureDesignService
 from src.services.implementation_design_service import ImplementationDesignService
+from src.services.project_initializer import ProjectInitializer
 
 
 # Shared instances – all services share one ContextManager so they
@@ -20,6 +21,7 @@ analysis_engine = AIAnalysisEngine(context_manager=ctx)
 req_service = RequirementManagementService(context_manager=ctx)
 arch_service = ArchitectureDesignService(context_manager=ctx)
 impl_service = ImplementationDesignService(context_manager=ctx)
+initializer = ProjectInitializer(context_manager=ctx)
 
 
 def understand_project():
@@ -134,11 +136,12 @@ def intent_user_input(user_input: str) -> str:
         
         Please categorize the user's intent into one of the following categories:
         1. understand_project: The user wants to understand the overall project structure and key files.
-        2. new_feature: The user wants to add a new feature to the project.
-        3. bug_fix: The user wants to fix a bug in the project.
-        4. code_refactor: The user wants to refactor existing code for better readability or performance.
-        5. ideation: The user wants to ideate on the project.
-        6. other: The user's intent does not fit into any of the above categories.
+        2. initialize_project: The user wants to initialize or construct full context for an existing project for AI agent coding assistance.
+        3. new_feature: The user wants to add a new feature to the project.
+        4. bug_fix: The user wants to fix a bug in the project.
+        5. code_refactor: The user wants to refactor existing code for better readability or performance.
+        6. ideation: The user wants to ideate on the project.
+        7. other: The user's intent does not fit into any of the above categories.
 
         Return should be in this format:
         {{
@@ -283,6 +286,13 @@ def handle_new_feature(user_input):
     design_implementation(architecture)
 
 
+def initialize_project():
+    """Construct full context for an existing project (overview → requirements → architecture → implementation)."""
+    result = initializer.initialize()
+    print(f"\nProject initialized with contexts: {', '.join(result['contexts'])}")
+    print("The AI agent can now use this context for coding assistance.")
+
+
 def main():
     print("Welcome to pofe - Source Code Understanding Tool!")
     print("What do you want?.")
@@ -293,6 +303,8 @@ def main():
 
     if intent == "understand_project":
         understand_project()
+    elif intent == "initialize_project":
+        initialize_project()
     elif intent == "new_feature":
         handle_new_feature(user_input)
     elif intent == "bug_fix":
