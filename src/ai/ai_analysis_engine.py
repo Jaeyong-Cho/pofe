@@ -10,12 +10,16 @@ from typing import Any
 
 from src.context.context_manager import ContextManager
 from src.ai.model import ask_ai_json
+from src.uid import make_uid
 
 
 class AIAnalysisEngine:
     """
     Uses AI models to analyse feature descriptions and detect
     architectural impact.
+
+    After AI returns changes, deterministic hash UIDs are assigned
+    and ``related_to`` references are resolved from names to UIDs.
     """
 
     def __init__(
@@ -26,6 +30,10 @@ class AIAnalysisEngine:
         self._ctx = context_manager or ContextManager()
         self._backend = backend
 
+    # ------------------------------------------------------------------
+    # Requirement analysis
+    # ------------------------------------------------------------------
+
     def analyze_feature_description(
         self,
         feature_description: str,
@@ -35,15 +43,19 @@ class AIAnalysisEngine:
         Analyse a feature description and return proposed requirement changes.
 
         Each entry has:
-            action   – "create" | "update" | "delete"
-            requirement – the requirement dict (with title, description, tags,
-                          status)
+            action      – "create" | "update" | "delete"
+            requirement – the requirement dict with uid, title, description,
+                          tags, status, related_to
         """
         prompt = f"""You are an expert in software engineering.
 
 Analyse the following new feature description against the current requirements.
 Determine which requirements should be created, updated, or deleted.
 Also categorize each requirement with appropriate tags.
+
+Each requirement must include a "related_to" array listing the names of
+architecture components that realise or support this requirement.
+For updates, preserve existing related_to where applicable.
 
 Return JSON only in this format:
 {{
@@ -54,7 +66,8 @@ Return JSON only in this format:
                 "title": "...",
                 "description": "...",
                 "tags": ["..."],
-                "status": "new"
+                "status": "new",
+                "related_to": ["ComponentName"]
             }}
         }},
         {{
@@ -63,7 +76,8 @@ Return JSON only in this format:
                 "title": "...",
                 "description": "...",
                 "tags": ["..."],
-                "status": "in progress"
+                "status": "in progress",
+                "related_to": ["ComponentName"]
             }}
         }},
         {{
@@ -86,7 +100,15 @@ Do not include any explanation or additional text.
 </current requirements>
 """
         result = ask_ai_json(prompt, backend=self._backend)
-        return result.get("changes", [])
+        changes = result.get("changes", [])
+
+        # Assign UIDs & resolve related_to on new/updated requirements
+        self._resolve_requirement_changes(changes)
+        return changes
+
+    # ------------------------------------------------------------------
+    # Architecture impact
+    # ------------------------------------------------------------------
 
     def detect_architectural_impact(
         self,
@@ -98,13 +120,17 @@ Do not include any explanation or additional text.
 
         Returns a list of architectural change suggestions, each with:
             action    – "create" | "update" | "delete"
-            component – the component dict
+            component – the component dict with uid, related_to
         """
         prompt = f"""You are an expert in software engineering.
 
 Analyse the following requirement changes and determine their impact on the
 current architecture.  Suggest which components should be created, updated, or
 deleted.
+
+Each component must include a "related_to" array listing the names of
+implementation classes and functions that belong to it, plus the titles of
+requirements it realises.  For updates, preserve existing related_to.
 
 Return JSON only in this format:
 {{
@@ -116,7 +142,8 @@ Return JSON only in this format:
                 "responsibilities": "...",
                 "interactions": [
                     {{"OtherComponent": "..."}}
-                ]
+                ],
+                "related_to": ["ClassName", "Requirement Title"]
             }}
         }},
         {{
@@ -126,7 +153,8 @@ Return JSON only in this format:
                 "responsibilities": "...",
                 "interactions": [
                     {{"OtherComponent": "..."}}
-                ]
+                ],
+                "related_to": ["ClassName", "Requirement Title"]
             }}
         }}
     ]
@@ -143,4 +171,90 @@ Do not include any explanation or additional text.
 </current architecture>
 """
         result = ask_ai_json(prompt, backend=self._backend)
-        return result.get("changes", [])
+        changes = result.get("changes", [])
+
+        # Assign UIDs & resolve related_to on new/updated components
+        self._resolve_architecture_changes(changes, current_architecture)
+        return changes
+
+    # ------------------------------------------------------------------
+    # UID assignment and related_to resolution
+    # ------------------------------------------------------------------
+
+    def _resolve_requirement_changes(
+        self, changes: list[dict[str, Any]],
+    ) -> None:
+        """Assign UIDs to new requirements; resolve related_to names → arch UIDs."""
+        arch_lookup = self._build_arch_lookup()
+
+        for change in changes:
+            req = change.get("requirement", {})
+            if change.get("action") in ("create", "update"):
+                req.setdefault("related_to", [])
+                # Assign uid based on title
+                req["uid"] = make_uid("req", req.get("title", ""))
+                # Resolve component names → arch UIDs
+                req["related_to"] = [
+                    arch_lookup.get(ref, ref) for ref in req["related_to"]
+                ]
+
+    def _resolve_architecture_changes(
+        self,
+        changes: list[dict[str, Any]],
+        current_architecture: dict[str, Any],
+    ) -> None:
+        """Assign UIDs to new components; resolve related_to names → impl/req UIDs."""
+        impl_lookup = self._build_impl_lookup()
+        req_lookup = self._build_req_lookup()
+
+        for change in changes:
+            comp = change.get("component", {})
+            if change.get("action") in ("create", "update"):
+                comp_name = comp.get("component", "")
+                comp["uid"] = make_uid("arch", comp_name)
+                comp.setdefault("related_to", [])
+                resolved = []
+                for ref in comp["related_to"]:
+                    if ref in impl_lookup:
+                        resolved.append(impl_lookup[ref])
+                    elif ref in req_lookup:
+                        resolved.append(req_lookup[ref])
+                    else:
+                        resolved.append(ref)
+                comp["related_to"] = resolved
+
+    def _build_arch_lookup(self) -> dict[str, str]:
+        """component name → uid from stored architecture context."""
+        if not self._ctx.context_exists("architecture"):
+            return {}
+        data = self._ctx.read_context("architecture")
+        arch = data.get("architecture", {})
+        return {
+            c.get("component", ""): c.get("uid", "")
+            for c in arch.get("components", [])
+        }
+
+    def _build_impl_lookup(self) -> dict[str, str]:
+        """class/function name → uid from stored implementation context."""
+        if not self._ctx.context_exists("implementation"):
+            return {}
+        data = self._ctx.read_context("implementation")
+        lookup: dict[str, str] = {}
+        for f in data.get("files", []):
+            for cls in f.get("classes", []):
+                lookup[cls.get("name", "")] = cls.get("uid", "")
+                for mtd in cls.get("methods", []):
+                    lookup[f"{cls.get('name', '')}.{mtd.get('name', '')}"] = mtd.get("uid", "")
+            for fn in f.get("functions", []):
+                lookup[fn.get("name", "")] = fn.get("uid", "")
+        return lookup
+
+    def _build_req_lookup(self) -> dict[str, str]:
+        """requirement title → uid from stored requirements context."""
+        if not self._ctx.context_exists("requirements"):
+            return {}
+        data = self._ctx.read_context("requirements")
+        return {
+            r.get("title", ""): r.get("uid", "")
+            for r in data.get("requirements", [])
+        }

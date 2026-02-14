@@ -4,6 +4,9 @@ ArchitectureDesignService – maintains and updates the system architecture.
 Applies AI-driven change suggestions to the architecture context and
 notifies downstream services (ImplementationDesignService) about
 affected components.
+
+Components carry ``uid`` and ``related_to`` fields that link to
+implementation (cls-*, mtd-*, fn-*) and requirement (req-*) UIDs.
 """
 
 import json
@@ -11,6 +14,7 @@ from typing import Any
 
 from src.context.context_manager import ContextManager
 from src.ai.model import ask_ai_json
+from src.uid import make_uid
 
 
 class ArchitectureDesignService:
@@ -52,6 +56,10 @@ class ArchitectureDesignService:
         *changes* is a list of dicts with keys ``action`` (create/update/delete)
         and ``component`` (the component dict).
 
+        Incoming components must already have ``uid`` and ``related_to`` set
+        (handled by AIAnalysisEngine).  On update the new ``related_to`` is
+        merged with the existing one.
+
         Returns the updated architecture and a list of affected component names.
         """
         arch = self._load()
@@ -63,8 +71,11 @@ class ArchitectureDesignService:
             comp = change.get("component", {})
             name = comp.get("component", "")
 
+            # Ensure uid exists
+            comp.setdefault("uid", make_uid("arch", name))
+            comp.setdefault("related_to", [])
+
             if action == "create":
-                # Only add if not already present
                 if not any(c["component"] == name for c in components):
                     components.append(comp)
                     affected.append(name)
@@ -72,11 +83,15 @@ class ArchitectureDesignService:
             elif action == "update":
                 for i, c in enumerate(components):
                     if c["component"] == name:
+                        # Merge related_to: keep existing + add new
+                        existing_related = set(c.get("related_to", []))
+                        for ref in comp.get("related_to", []):
+                            existing_related.add(ref)
+                        comp["related_to"] = list(existing_related)
                         components[i] = comp
                         affected.append(name)
                         break
                 else:
-                    # Component didn't exist – create it
                     components.append(comp)
                     affected.append(name)
 

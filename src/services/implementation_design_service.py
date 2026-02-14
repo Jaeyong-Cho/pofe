@@ -2,8 +2,11 @@
 ImplementationDesignService – designs functions and workflows for components.
 
 Takes component information from the ArchitectureDesignService and produces
-detailed function signatures, descriptions, inputs/outputs, and processing
-logic for each component.
+detailed per-file implementation designs (classes, functions, dependencies,
+patterns) that are compatible with the ProjectInitializer format.
+
+Every class, method, and function receives a deterministic hash UID and
+a ``related_to`` field linking back to architecture component UIDs.
 """
 
 import json
@@ -11,12 +14,40 @@ from typing import Any
 
 from src.context.context_manager import ContextManager
 from src.ai.model import ask_ai_json
+from src.uid import make_uid
 
 
 class ImplementationDesignService:
     """
-    Generates implementation-level function designs for architecture components
+    Generates implementation-level designs for architecture components
     and persists them in the ``implementation`` context.
+
+    Storage format (shared with ProjectInitializer):
+        {"files": [
+            {
+                "file": "src/services/foo.py",
+                "purpose": "...",
+                "classes": [{
+                    "uid": "cls-...", "name": "...",
+                    "responsibility": "...",
+                    "methods": [{
+                        "uid": "mtd-...", "name": "...",
+                        "purpose": "...",
+                        "input": "...", "processing": "...", "output": "...",
+                        "related_to": ["arch-..."]
+                    }],
+                    "related_to": ["arch-..."]
+                }],
+                "functions": [{
+                    "uid": "fn-...", "name": "...",
+                    "purpose": "...",
+                    "input": "...", "processing": "...", "output": "...",
+                    "related_to": ["arch-..."]
+                }],
+                "dependencies": ["..."],
+                "patterns": "..."
+            }
+        ]}
     """
 
     CONTEXT_ID = "implementation"
@@ -33,18 +64,14 @@ class ImplementationDesignService:
         if not self._ctx.context_exists(self.CONTEXT_ID):
             return []
         data = self._ctx.read_context(self.CONTEXT_ID)
-        impl = data.get("implementation", {})
-        # Handle both formats: list or {"implementation": [...]}
-        if isinstance(impl, dict):
-            return impl.get("implementation", [])
-        return impl
+        return data.get("files", [])
 
-    def _save(self, implementations: list[dict[str, Any]]) -> None:
-        self._ctx.update_context(
-            self.CONTEXT_ID,
-            {"implementation": {"implementation": implementations}},
-            merge=False,
-        )
+    def _save(self, files: list[dict[str, Any]]) -> None:
+        payload = {"files": files}
+        if self._ctx.context_exists(self.CONTEXT_ID):
+            self._ctx.update_context(self.CONTEXT_ID, payload, merge=False)
+        else:
+            self._ctx.create_context(self.CONTEXT_ID, payload)
 
     def design_functions_for_component(
         self,
@@ -53,34 +80,55 @@ class ImplementationDesignService:
         requirements: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
-        Design detailed functions for a single component.
+        Design detailed implementation for a single component.
 
-        Returns a file-spec dict containing the component name, file path,
-        and a list of function definitions.
+        Returns a dict containing the component name and its file specs.
         """
         reqs_block = json.dumps(requirements, indent=2) if requirements else "N/A"
+        arch_uid = component.get("uid", "")
 
         prompt = f"""You are an expert in software engineering.
 
-Design detailed functions for the following component based on the architecture
-and requirements provided.  For each function, specify its name, description,
-input, processing logic, and output.
+Design detailed implementation for the following component based on the
+architecture and requirements provided.  For each file the component needs,
+specify its purpose, classes with methods, standalone functions, dependencies,
+and design patterns.
+
+For every method and function, describe input/processing/output (not just
+parameters).
 
 Return JSON only in this format:
 {{
     "files": [
         {{
-            "path": "src/services/component_name.py",
-            "component": "ComponentName",
+            "file": "src/services/component_name.py",
+            "purpose": "What this file does and why it exists.",
+            "classes": [
+                {{
+                    "name": "ClassName",
+                    "responsibility": "What it does.",
+                    "methods": [
+                        {{
+                            "name": "method_name",
+                            "purpose": "What it does.",
+                            "input": "What it receives.",
+                            "processing": "How it works.",
+                            "output": "What it returns."
+                        }}
+                    ]
+                }}
+            ],
             "functions": [
                 {{
-                    "name": "function_name",
-                    "description": "What it does.",
+                    "name": "func_name",
+                    "purpose": "What it does.",
                     "input": "What it receives.",
                     "processing": "How it works.",
                     "output": "What it returns."
                 }}
-            ]
+            ],
+            "dependencies": ["list", "of", "imports"],
+            "patterns": "Notable design patterns or conventions used."
         }}
     ]
 }}
@@ -102,38 +150,37 @@ Do not include any explanation or additional text.
         result = ask_ai_json(prompt, backend=self._backend)
         file_specs = result.get("files", [])
 
-        # Merge into stored implementations
+        # Assign UIDs and link back to architecture component
+        for spec in file_specs:
+            self._assign_uids(spec, arch_uid)
+
         self._merge_file_specs(file_specs)
 
         return {"component": component.get("component"), "files": file_specs}
 
     def provide_implementation_design(self) -> list[dict[str, Any]]:
-        """
-        Return the full implementation design for user review.
-        """
+        """Return the full implementation design for user review."""
         return self._load()
 
+    @staticmethod
+    def _assign_uids(file_entry: dict[str, Any], arch_uid: str) -> None:
+        """Assign hash UIDs and set related_to for all items in a file spec."""
+        path = file_entry.get("file", "")
+        for cls in file_entry.get("classes", []):
+            cls_name = cls.get("name", "")
+            cls["uid"] = make_uid("cls", path, cls_name)
+            cls["related_to"] = [arch_uid] if arch_uid else []
+            for mtd in cls.get("methods", []):
+                mtd["uid"] = make_uid("mtd", path, cls_name, mtd.get("name", ""))
+                mtd["related_to"] = [arch_uid] if arch_uid else []
+        for fn in file_entry.get("functions", []):
+            fn["uid"] = make_uid("fn", path, fn.get("name", ""))
+            fn["related_to"] = [arch_uid] if arch_uid else []
+
     def _merge_file_specs(self, new_specs: list[dict[str, Any]]) -> None:
-        """Merge new file specs into stored implementations, replacing duplicates."""
+        """Merge new file specs into stored implementations by file path."""
         current = self._load()
-
-        # Build a lookup by component name for replacement
-        by_component: dict[str, int] = {}
-        for i, impl_group in enumerate(current):
-            files = impl_group.get("files", [])
-            for f in files:
-                by_component[f.get("component", "")] = i
-
-        # For simplicity, keep one flat list of file entries
-        # Flatten current
-        all_files: dict[str, dict] = {}
-        for impl_group in current:
-            for f in impl_group.get("files", []):
-                all_files[f.get("component", f.get("path", ""))] = f
-
-        # Merge new
-        for f in new_specs:
-            all_files[f.get("component", f.get("path", ""))] = f
-
-        # Save as single implementation group
-        self._save([{"files": list(all_files.values())}])
+        by_file: dict[str, dict[str, Any]] = {f["file"]: f for f in current}
+        for spec in new_specs:
+            by_file[spec["file"]] = spec
+        self._save(list(by_file.values()))

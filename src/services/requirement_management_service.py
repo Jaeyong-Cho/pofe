@@ -3,6 +3,9 @@ RequirementManagementService – lifecycle management for project requirements.
 
 Manages creation, update, deletion, and categorisation of requirements.
 Persists everything through the ContextManager (``requirements`` context).
+
+Each requirement carries ``uid`` (hash-based) and ``related_to`` (list of
+architecture UIDs) for cross-referencing with other context layers.
 """
 
 import json
@@ -10,6 +13,7 @@ from typing import Any
 
 from src.context.context_manager import ContextManager
 from src.ai.model import ask_ai_json
+from src.uid import make_uid
 
 
 class RequirementManagementService:
@@ -54,16 +58,19 @@ class RequirementManagementService:
         Add a new requirement.
 
         *requirement* must contain at least ``title`` and ``description``.
-        ``tags`` and ``status`` are optional (defaults: ``[]``, ``"new"``).
+        ``tags``, ``status``, ``related_to`` are optional.
+        A ``uid`` is assigned automatically from the title.
         """
         requirement.setdefault("tags", [])
         requirement.setdefault("status", "new")
+        requirement.setdefault("related_to", [])
+        requirement.setdefault("uid", make_uid("req", requirement.get("title", "")))
 
         reqs = self._load()
         reqs.append(requirement)
         self._save(reqs)
 
-        return {"title": requirement["title"], "status": "created"}
+        return {"uid": requirement["uid"], "title": requirement["title"], "status": "created"}
 
     def update_requirement(
         self,
@@ -73,14 +80,20 @@ class RequirementManagementService:
         """
         Update the requirement matching *title*.
 
+        Merges ``related_to`` rather than replacing it.
         Raises ``KeyError`` if no requirement with that title exists.
         """
         reqs = self._load()
         for req in reqs:
             if req["title"] == title:
+                # Merge related_to
+                if "related_to" in updates:
+                    existing = set(req.get("related_to", []))
+                    existing.update(updates.pop("related_to"))
+                    req["related_to"] = list(existing)
                 req.update(updates)
                 self._save(reqs)
-                return {"title": title, "status": "updated"}
+                return {"uid": req.get("uid", ""), "title": title, "status": "updated"}
 
         raise KeyError(f"Requirement '{title}' not found.")
 
@@ -115,6 +128,7 @@ class RequirementManagementService:
         Use AI to assign or refine tags/categories on requirements.
 
         If *requirements* is ``None``, categorises the stored set in-place.
+        UIDs and related_to are preserved.
         """
         reqs = requirements if requirements is not None else self._load()
         if not reqs:
@@ -124,15 +138,18 @@ class RequirementManagementService:
 
 Categorize the following requirements by assigning appropriate tags.
 Each requirement should have relevant, concise tags that describe its domain.
+Preserve existing uid and related_to fields exactly as they are.
 
 Return JSON only in this format:
 {{
     "requirements": [
         {{
+            "uid": "...",
             "title": "...",
             "description": "...",
             "tags": ["tag1", "tag2"],
-            "status": "..."
+            "status": "...",
+            "related_to": ["..."]
         }}
     ]
 }}
@@ -146,7 +163,14 @@ Do not include any explanation or additional text.
         result = ask_ai_json(prompt, backend=self._backend)
         categorized = result.get("requirements", reqs)
 
-        # Persist if we categorised the stored set
+        # Ensure UIDs survive AI round-trip
+        by_title = {r["title"]: r for r in reqs}
+        for cat in categorized:
+            original = by_title.get(cat.get("title", ""))
+            if original:
+                cat.setdefault("uid", original.get("uid", ""))
+                cat.setdefault("related_to", original.get("related_to", []))
+
         if requirements is None:
             self._save(categorized)
 
@@ -171,10 +195,9 @@ Do not include any explanation or additional text.
                 try:
                     self.update_requirement(req["title"], req)
                 except KeyError:
-                    # If it doesn't exist yet, create it
                     self.create_requirement(req)
             elif action == "delete":
                 try:
                     self.delete_requirement(req["title"])
                 except KeyError:
-                    pass  # already gone
+                    pass
