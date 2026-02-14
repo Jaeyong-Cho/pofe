@@ -203,6 +203,14 @@ def ideation():
         ctx.create_context("ideas", ideas_data)
 
 
+def _confirm(label: str, data) -> bool:
+    """Show analysis result and ask the user to confirm before persisting."""
+    print(f"\n=== Proposed {label} ===")
+    print(json.dumps(data, indent=4))
+    answer = input(f"\nApply these {label.lower()} changes? [Y/n] >> ").strip().lower()
+    return answer in ("", "y", "yes")
+
+
 def analysis_requirements(user_input: str):
     if not ctx.context_exists("overview"):
         understand_project()
@@ -216,15 +224,17 @@ def analysis_requirements(user_input: str):
         current_requirements=current_requirements,
     )
 
+    if not _confirm("Requirement Changes", changes):
+        print("  ✗ Requirement changes discarded.")
+        return current_requirements
+
     # Apply changes through RequirementManagementService
     req_service.apply_changes(changes)
 
     # Retrieve the updated requirements
     updated = req_service.get_all()
 
-    print("\n=== Analyzed Requirements for New Feature ===")
-    print(json.dumps(updated, indent=4))
-
+    print("\n=== Requirements Updated ===")
     return updated
 
 
@@ -241,13 +251,15 @@ def design_software_architecture(requirements):
         current_architecture=current_arch,
     )
 
+    if not _confirm("Architecture Changes", arch_changes):
+        print("  ✗ Architecture changes discarded.")
+        return current_arch
+
     # Apply changes through ArchitectureDesignService
     result = arch_service.update_architecture(arch_changes)
     architecture = result["architecture"]
 
-    print("\n=== Designed Software Architecture ===")
-    print(json.dumps(architecture, indent=4))
-
+    print("\n=== Architecture Updated ===")
     return architecture
 
 
@@ -269,11 +281,21 @@ def design_implementation(architecture):
 
     for comp in affected:
         print(f"  Designing: {comp['component']}...")
-        impl_service.design_functions_for_component(
+        design_result = impl_service.design_functions_for_component(
             component=comp,
             architecture=arch,
             requirements=requirements,
+            persist=False,
         )
+
+        if _confirm(f"Implementation: {comp['component']}", design_result):
+            impl_service.design_functions_for_component(
+                component=comp,
+                architecture=arch,
+                requirements=requirements,
+            )
+        else:
+            print(f"  ✗ Implementation for {comp['component']} discarded.")
 
     # Show the full implementation design
     design = impl_service.provide_implementation_design()

@@ -78,12 +78,16 @@ class ImplementationDesignService:
         component: dict[str, Any],
         architecture: dict[str, Any],
         requirements: list[dict[str, Any]] | None = None,
+        persist: bool = True,
     ) -> dict[str, Any]:
         """
         Design detailed implementation for a single component.
 
         Uses ``related_to`` to filter requirements to only those linked
         to this component, reducing prompt noise.
+
+        When *persist* is ``False`` the design is returned without saving,
+        allowing the caller to preview before committing.
 
         Returns a dict containing the component name and its file specs.
         """
@@ -162,7 +166,8 @@ Do not include any explanation or additional text.
         for spec in file_specs:
             self._assign_uids(spec, arch_uid)
 
-        self._merge_file_specs(file_specs)
+        if persist:
+            self._merge_file_specs(file_specs)
 
         return {"component": component.get("component"), "files": file_specs}
 
