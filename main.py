@@ -166,7 +166,8 @@ def intent_user_input():
         2. new_feature: The user wants to add a new feature to the project.
         3. bug_fix: The user wants to fix a bug in the project.
         4. code_refactor: The user wants to refactor existing code for better readability or performance.
-        5. other: The user's intent does not fit into any of the above categories.
+        5. ideation: The user wants to ideate on the project.
+        6. other: The user's intent does not fit into any of the above categories.
 
         Return should be in this format:
         {{
@@ -185,6 +186,54 @@ def intent_user_input():
     return intent
 
 
+def ideation():
+    # read context/overview.json
+    if not os.path.exists("context/overview.json"):
+        print("No project overview found. Please run 'understand_project' intent first.")
+        return
+    
+    with open("context/overview.json", "r") as f:
+        overview = json.load(f)
+
+    project_summary = overview.get("project_summary", "")
+
+    prompt = f"""
+        You are expert of software engineering.
+        Please generate 5 innovative ideas for improving the project based on the following project summary. 
+        These ideas should be practical, feasible, and aligned with the project's goals.
+        Return should be in this format:
+        {{
+            "ideas": [
+                "Idea 1: Implement a dark mode for better user experience during nighttime.",
+                "Idea 2: Add a mobile app version of the project to reach more users.",
+                "Idea 3: Integrate AI-powered features to enhance functionality.",
+                "Idea 4: Optimize the database queries for faster performance.",
+                "Idea 5: Implement a plugin system to allow third-party extensions."
+            ]
+        }}
+
+        <project summary>
+        {project_summary}
+        </project summary>
+        """
+
+    result = ask_copilot(prompt)
+    result_json = json.loads(result)
+    ideas = result_json.get("ideas", [])
+    print("\n=== Innovative Ideas for Project Improvement ===")
+    for idx, idea in enumerate(ideas, 1):
+        print(f"{idx}. {idea}")
+        
+    # write ideas to context/ideas.json
+    if not os.path.exists("context"):
+        os.makedirs("context")
+        
+    with open("context/ideas.json", "w") as f:
+        json.dump({
+            "ideas": ideas
+        }, f, indent=4)
+
+
 def main():
     print("Welcome to pofe - Source Code Understanding Tool!")
 
@@ -197,6 +246,8 @@ def main():
         print("You want to fix a bug. This functionality is not implemented yet.")
     elif intent == "code_refactor":
         print("You want to refactor code. This functionality is not implemented yet.")
+    elif intent == "ideation":
+        ideation()
     else:
         print("Your intent does not fit into any of the predefined categories. Please try again with a clearer intent.")
 
