@@ -142,7 +142,8 @@ def intent_user_input(user_input: str) -> str:
         5. code_refactor: The user wants to refactor existing code for better readability or performance.
         6. ideation: The user wants to ideate on the project.
         7. dump_context: The user wants to export or dump all context data to JSON files.
-        8. other: The user's intent does not fit into any of the above categories.
+        8. review: The user wants to review AI-generated items and approve or advance their status.
+        9. other: The user's intent does not fit into any of the above categories.
 
         Return should be in this format:
         {{
@@ -203,14 +204,6 @@ def ideation():
         ctx.create_context("ideas", ideas_data)
 
 
-def _confirm(label: str, data) -> bool:
-    """Show analysis result and ask the user to confirm before persisting."""
-    print(f"\n=== Proposed {label} ===")
-    print(json.dumps(data, indent=4))
-    answer = input(f"\nApply these {label.lower()} changes? [Y/n] >> ").strip().lower()
-    return answer in ("", "y", "yes")
-
-
 def analysis_requirements(user_input: str):
     if not ctx.context_exists("overview"):
         understand_project()
@@ -223,10 +216,6 @@ def analysis_requirements(user_input: str):
         feature_description=user_input,
         current_requirements=current_requirements,
     )
-
-    if not _confirm("Requirement Changes", changes):
-        print("  ✗ Requirement changes discarded.")
-        return current_requirements
 
     # Apply changes through RequirementManagementService
     req_service.apply_changes(changes)
@@ -250,10 +239,6 @@ def design_software_architecture(requirements):
         requirement_changes=req_changes,
         current_architecture=current_arch,
     )
-
-    if not _confirm("Architecture Changes", arch_changes):
-        print("  ✗ Architecture changes discarded.")
-        return current_arch
 
     # Apply changes through ArchitectureDesignService
     result = arch_service.update_architecture(arch_changes)
@@ -281,21 +266,11 @@ def design_implementation(architecture):
 
     for comp in affected:
         print(f"  Designing: {comp['component']}...")
-        design_result = impl_service.design_functions_for_component(
+        impl_service.design_functions_for_component(
             component=comp,
             architecture=arch,
             requirements=requirements,
-            persist=False,
         )
-
-        if _confirm(f"Implementation: {comp['component']}", design_result):
-            impl_service.design_functions_for_component(
-                component=comp,
-                architecture=arch,
-                requirements=requirements,
-            )
-        else:
-            print(f"  ✗ Implementation for {comp['component']} discarded.")
 
     # Show the full implementation design
     design = impl_service.provide_implementation_design()
@@ -327,6 +302,69 @@ def dump_context():
         print(f"  ✓ {path}")
 
 
+def _uid_label(item: dict) -> str:
+    """Return a human-readable label for a UID-bearing item."""
+    uid = item.get("uid", "?")
+    name = (
+        item.get("title")        # requirements
+        or item.get("component")  # architecture
+        or item.get("name")       # cls / mtd / fn
+        or "unknown"
+    )
+    return f"[{uid}] {name}"
+
+
+def review_items():
+    """Interactive review of items with status ``new`` or ``reviewed``.
+
+    Shows each item and lets the user advance its status:
+        new → reviewed → done
+    Or skip to leave it unchanged.
+    """
+    # Collect reviewable items (new first, then reviewed)
+    new_items = ctx.find_by_status("new")
+    reviewed_items = ctx.find_by_status("reviewed")
+    items = new_items + reviewed_items
+
+    if not items:
+        print("\nNo items to review. Everything is up to date.")
+        return
+
+    print(f"\n=== Review: {len(new_items)} new, {len(reviewed_items)} reviewed ===")
+    print("For each item:  [y] advance status  |  [n] skip  |  [q] quit\n")
+
+    for item in items:
+        current_status = item.get("status", "new")
+        next_status = "reviewed" if current_status == "new" else "done"
+
+        print("-" * 60)
+        print(f"  {_uid_label(item)}")
+        print(f"  Status: {current_status} → {next_status}")
+
+        # Show relevant detail depending on item type
+        for key in ("description", "responsibility", "purpose"):
+            val = item.get(key)
+            if val:
+                print(f"  {key.capitalize()}: {val}")
+                break
+
+        answer = input(f"  Advance to '{next_status}'? [y/n/q] >> ").strip().lower()
+
+        if answer == "q":
+            print("  Review stopped.")
+            break
+        if answer in ("", "y", "yes"):
+            uid = item.get("uid", "")
+            if ctx.update_item_status(uid, next_status):
+                print(f"  ✓ {uid} → {next_status}")
+            else:
+                print(f"  ✗ Could not update {uid}")
+        else:
+            print("  — skipped")
+
+    print()
+
+
 def main():
     print("Welcome to pofe - Source Code Understanding Tool!")
     print("What do you want?.")
@@ -349,6 +387,8 @@ def main():
         ideation()
     elif intent == "dump_context":
         dump_context()
+    elif intent == "review":
+        review_items()
     elif intent == "query":
         # Direct AI agent query using all available context
         response = agent.answer_query(user_input)

@@ -78,16 +78,12 @@ class ImplementationDesignService:
         component: dict[str, Any],
         architecture: dict[str, Any],
         requirements: list[dict[str, Any]] | None = None,
-        persist: bool = True,
     ) -> dict[str, Any]:
         """
         Design detailed implementation for a single component.
 
         Uses ``related_to`` to filter requirements to only those linked
         to this component, reducing prompt noise.
-
-        When *persist* is ``False`` the design is returned without saving,
-        allowing the caller to preview before committing.
 
         Returns a dict containing the component name and its file specs.
         """
@@ -166,8 +162,7 @@ Do not include any explanation or additional text.
         for spec in file_specs:
             self._assign_uids(spec, arch_uid)
 
-        if persist:
-            self._merge_file_specs(file_specs)
+        self._merge_file_specs(file_specs)
 
         return {"component": component.get("component"), "files": file_specs}
 
@@ -177,18 +172,21 @@ Do not include any explanation or additional text.
 
     @staticmethod
     def _assign_uids(file_entry: dict[str, Any], arch_uid: str) -> None:
-        """Assign hash UIDs and set related_to for all items in a file spec."""
+        """Assign hash UIDs, set related_to, and default status for all items."""
         path = file_entry.get("file", "")
         for cls in file_entry.get("classes", []):
             cls_name = cls.get("name", "")
             cls["uid"] = make_uid("cls", path, cls_name)
             cls["related_to"] = [arch_uid] if arch_uid else []
+            cls.setdefault("status", "new")
             for mtd in cls.get("methods", []):
                 mtd["uid"] = make_uid("mtd", path, cls_name, mtd.get("name", ""))
                 mtd["related_to"] = [arch_uid] if arch_uid else []
+                mtd.setdefault("status", "new")
         for fn in file_entry.get("functions", []):
             fn["uid"] = make_uid("fn", path, fn.get("name", ""))
             fn["related_to"] = [arch_uid] if arch_uid else []
+            fn.setdefault("status", "new")
 
     def _merge_file_specs(self, new_specs: list[dict[str, Any]]) -> None:
         """Merge new file specs into stored implementations by file path."""

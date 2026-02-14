@@ -74,6 +74,7 @@ class ArchitectureDesignService:
             # Ensure uid exists
             comp.setdefault("uid", make_uid("arch", name))
             comp.setdefault("related_to", [])
+            comp.setdefault("status", "new")
 
             if action == "create":
                 if not any(c["component"] == name for c in components):
@@ -88,6 +89,8 @@ class ArchitectureDesignService:
                         for ref in comp.get("related_to", []):
                             existing_related.add(ref)
                         comp["related_to"] = list(existing_related)
+                        # Preserve user-set status (AI cannot change it)
+                        comp["status"] = c.get("status", "new")
                         components[i] = comp
                         affected.append(name)
                         break

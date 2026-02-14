@@ -191,6 +191,86 @@ class ContextManager:
             return None
         return json.loads(row[0])
 
+    def find_by_status(self, status: str) -> list[dict[str, Any]]:
+        """
+        Return all UID-bearing items whose ``status`` matches *status*.
+
+        Uses SQLite's ``json_extract`` on the uid_index data column.
+        """
+        rows = self._conn.execute(
+            "SELECT data FROM uid_index WHERE json_extract(data, '$.status') = ?",
+            (status,),
+        ).fetchall()
+        return [json.loads(r[0]) for r in rows]
+
+    def update_item_status(self, uid: str, new_status: str) -> bool:
+        """
+        Change the ``status`` of an item identified by *uid*.
+
+        Updates both the source context row and the uid_index cache.
+        Returns ``True`` on success, ``False`` if the UID was not found.
+        """
+        row = self._conn.execute(
+            "SELECT context_id, data FROM uid_index WHERE uid = ?", (uid,)
+        ).fetchone()
+        if row is None:
+            return False
+
+        context_id = row[0]
+        ctx_data = self.read_context(context_id)
+
+        # Walk the context structure and update the matching item in place
+        updated = self._set_status_in_context(context_id, ctx_data, uid, new_status)
+        if not updated:
+            return False
+
+        # Persist the modified context (reindex updates uid_index too)
+        self._conn.execute(
+            "INSERT OR REPLACE INTO contexts (context_id, data) VALUES (?, ?)",
+            (context_id, json.dumps(ctx_data, ensure_ascii=False)),
+        )
+        self._reindex_context(context_id, ctx_data)
+        self._conn.commit()
+        return True
+
+    @staticmethod
+    def _set_status_in_context(
+        context_id: str,
+        data: dict[str, Any],
+        uid: str,
+        status: str,
+    ) -> bool:
+        """Find the item with *uid* inside *data* and set its status. Returns True if found."""
+        if context_id == "requirements":
+            for r in data.get("requirements", []):
+                if r.get("uid") == uid:
+                    r["status"] = status
+                    return True
+
+        elif context_id == "architecture":
+            arch = data.get("architecture", {})
+            for c in arch.get("components", []):
+                if c.get("uid") == uid:
+                    c["status"] = status
+                    return True
+
+        elif context_id == "implementation":
+            for f in data.get("files", []):
+                for cls in f.get("classes", []):
+                    if cls.get("uid") == uid:
+                        cls["status"] = status
+                        return True
+                    for mtd in cls.get("methods", []):
+                        if mtd.get("uid") == uid:
+                            mtd["status"] = status
+                            return True
+                for fn in f.get("functions", []):
+                    if fn.get("uid") == uid:
+                        fn["status"] = status
+                        return True
+
+        return False
+
     def gather_related(self, uid: str, depth: int = 1) -> dict[str, Any]:
         """
         Follow ``related_to`` links starting from *uid* and assemble

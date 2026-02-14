@@ -91,6 +91,8 @@ class RequirementManagementService:
                     existing = set(req.get("related_to", []))
                     existing.update(updates.pop("related_to"))
                     req["related_to"] = list(existing)
+                # Preserve user-set status (AI cannot change it)
+                updates.pop("status", None)
                 req.update(updates)
                 self._save(reqs)
                 return {"uid": req.get("uid", ""), "title": title, "status": "updated"}

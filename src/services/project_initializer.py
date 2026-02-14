@@ -206,10 +206,13 @@ class ProjectInitializer:
         for cls in file_entry.get("classes", []):
             cls_name = cls.get("name", "")
             cls["uid"] = make_uid("cls", path, cls_name)
+            cls.setdefault("status", "new")
             for mtd in cls.get("methods", []):
                 mtd["uid"] = make_uid("mtd", path, cls_name, mtd.get("name", ""))
+                mtd.setdefault("status", "new")
         for fn in file_entry.get("functions", []):
             fn["uid"] = make_uid("fn", path, fn.get("name", ""))
+            fn.setdefault("status", "new")
 
     @staticmethod
     def _assign_arch_uids(
@@ -232,6 +235,7 @@ class ProjectInitializer:
         for comp in architecture.get("components", []):
             comp_name = comp.get("component", "")
             comp["uid"] = make_uid("arch", comp_name)
+            comp.setdefault("status", "new")
             resolved = []
             for ref in comp.get("related_to", []):
                 if ref in impl_lookup:
@@ -252,6 +256,7 @@ class ProjectInitializer:
 
         for req in requirements:
             req["uid"] = make_uid("req", req.get("title", ""))
+            req.setdefault("status", "new")
             resolved = []
             for ref in req.get("related_to", []):
                 if ref in arch_lookup:
