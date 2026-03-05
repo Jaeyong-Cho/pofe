@@ -92,6 +92,13 @@ def main() -> None:
         help="Flag match statements with N+ cases as SwitchStatement (default: 3).",
     )
     parser.add_argument(
+        "--temporary-field-threshold",
+        type=int,
+        default=1,
+        metavar="N",
+        help="Flag classes with N+ temporary fields as TemporaryField (default: 1).",
+    )
+    parser.add_argument(
         "--format",
         choices=["text", "json"],
         default="text",
@@ -111,6 +118,7 @@ def main() -> None:
             data_clump_size=args.data_clump_size,
             if_else_chain_threshold=args.if_else_chain_threshold,
             match_case_threshold=args.match_case_threshold,
+            temporary_field_threshold=args.temporary_field_threshold,
         )
     except (FileNotFoundError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)

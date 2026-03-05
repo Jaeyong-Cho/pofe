@@ -21,7 +21,8 @@ Public API:
                                            "DataClump.ParameterClump",
                                            "DataClump.FieldClump",
                                            "SwitchStatement.IfElseChain",
-                                           "SwitchStatement.ComplexMatch")
+                                           "SwitchStatement.ComplexMatch",
+                                           "TemporaryField")
             file            : str        - source file path
             name            : str        - function, class, or scope name
             start_line      : int        - 1-based start line
@@ -33,6 +34,7 @@ Public API:
             primitive_count : int|None   - number of primitives (PrimitiveObsession only)
             clump           : tuple|None - shared variable names (DataClump only)
             branch_count    : int|None   - number of branches (SwitchStatement only)
+            temp_fields     : tuple|None  - temporary field names (TemporaryField only)
 """
 
 from __future__ import annotations
@@ -47,6 +49,7 @@ from .long_method import detect as _detect_long_method
 from .models import SmellReport
 from .primitive_obsession import detect as _detect_primitive_obsession
 from .switch_statements import detect as _detect_switch_statements
+from .temporary_field import detect as _detect_temporary_field
 
 __all__ = ["SmellReport", "detect_smells"]
 
@@ -63,6 +66,7 @@ def detect_smells(
     data_clump_size: int = 3,
     if_else_chain_threshold: int = 3,
     match_case_threshold: int = 3,
+    temporary_field_threshold: int = 1,
 ) -> list[SmellReport]:
     """Detect code smells in a Python file or directory.
 
@@ -78,6 +82,7 @@ def detect_smells(
         data_clump_size:             Minimum shared names to constitute a data clump.
         if_else_chain_threshold:     Flag if/elif chains with this many+ total branches.
         match_case_threshold:        Flag match statements with this many+ case clauses.
+        temporary_field_threshold:   Flag classes with this many+ temporary fields.
 
     Returns:
         A list of SmellReport sorted by (file, start_line).
@@ -122,6 +127,12 @@ def detect_smells(
                 file,
                 if_else_chain_threshold=if_else_chain_threshold,
                 match_case_threshold=match_case_threshold,
+            )
+        )
+        reports.extend(
+            _detect_temporary_field(
+                file,
+                threshold=temporary_field_threshold,
             )
         )
 
