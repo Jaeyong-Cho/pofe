@@ -146,7 +146,8 @@ class TestDetectSmells:
         (tmp_path / "c.py").write_text("def small(): pass\n")
 
         reports = detect_smells(tmp_path)
-        assert len(reports) == 2
+        long_method = [r for r in reports if r.smell == "LongMethod"]
+        assert len(long_method) == 2
 
     def test_results_sorted_by_file_then_line(self, tmp_path):
         body = "\n".join(f"    x{i} = {i}" for i in range(25))

@@ -18,6 +18,8 @@ Public API:
             smell           : str        - smell name ("LongMethod", "LargeClass",
                                            "PrimitiveObsession.TypeCode",
                                            "PrimitiveObsession.PrimitiveParameterCluster",
+                                           "DuplicateCode.ClonedFunction",
+                                           "DuplicateCode.DuplicateBlock",
                                            "DataClump.ParameterClump",
                                            "DataClump.FieldClump",
                                            "SwitchStatement.IfElseChain",
@@ -35,12 +37,15 @@ Public API:
             clump           : tuple|None - shared variable names (DataClump only)
             branch_count    : int|None   - number of branches (SwitchStatement only)
             temp_fields     : tuple|None  - temporary field names (TemporaryField only)
+            clone_of        : tuple|None  - (file, start_line) pairs of clones (DuplicateCode only)
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from .duplicate_code import collect_body_data as _collect_body_data
+from .duplicate_code import detect_from_collected as _detect_duplicate_code
 from .data_clumps import collect_field_data as _collect_field_data
 from .data_clumps import collect_param_data as _collect_param_data
 from .data_clumps import detect_from_collected as _detect_data_clumps
@@ -67,6 +72,8 @@ def detect_smells(
     if_else_chain_threshold: int = 3,
     match_case_threshold: int = 3,
     temporary_field_threshold: int = 1,
+    duplicate_code_min_lines: int = 3,
+    duplicate_code_min_block_stmts: int = 3,
 ) -> list[SmellReport]:
     """Detect code smells in a Python file or directory.
 
@@ -83,6 +90,8 @@ def detect_smells(
         if_else_chain_threshold:     Flag if/elif chains with this many+ total branches.
         match_case_threshold:        Flag match statements with this many+ case clauses.
         temporary_field_threshold:   Flag classes with this many+ temporary fields.
+        duplicate_code_min_lines:    Minimum effective lines for ClonedFunction.
+        duplicate_code_min_block_stmts: Minimum consecutive statements for DuplicateBlock.
 
     Returns:
         A list of SmellReport sorted by (file, start_line).
@@ -102,6 +111,7 @@ def detect_smells(
     reports: list[SmellReport] = []
     all_param_data: list = []
     all_field_data: list = []
+    all_body_data: list = []
 
     for file in files:
         reports.extend(_detect_long_method(file, threshold=long_method_threshold))
@@ -122,6 +132,7 @@ def detect_smells(
         )
         all_param_data.extend(_collect_param_data(file))
         all_field_data.extend(_collect_field_data(file))
+        all_body_data.extend(_collect_body_data(file))
         reports.extend(
             _detect_switch_statements(
                 file,
@@ -137,5 +148,12 @@ def detect_smells(
         )
 
     reports.extend(_detect_data_clumps(all_param_data, all_field_data, data_clump_size))
+    reports.extend(
+        _detect_duplicate_code(
+            all_body_data,
+            min_lines=duplicate_code_min_lines,
+            min_block_stmts=duplicate_code_min_block_stmts,
+        )
+    )
     reports.sort(key=lambda r: (r.file, r.start_line))
     return reports

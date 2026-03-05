@@ -99,6 +99,20 @@ def main() -> None:
         help="Flag classes with N+ temporary fields as TemporaryField (default: 1).",
     )
     parser.add_argument(
+        "--duplicate-code-min-lines",
+        type=int,
+        default=3,
+        metavar="N",
+        help="Minimum effective lines for ClonedFunction detection (default: 3).",
+    )
+    parser.add_argument(
+        "--duplicate-code-min-block-stmts",
+        type=int,
+        default=3,
+        metavar="N",
+        help="Minimum consecutive statements for DuplicateBlock detection (default: 3).",
+    )
+    parser.add_argument(
         "--format",
         choices=["text", "json"],
         default="text",
@@ -119,6 +133,8 @@ def main() -> None:
             if_else_chain_threshold=args.if_else_chain_threshold,
             match_case_threshold=args.match_case_threshold,
             temporary_field_threshold=args.temporary_field_threshold,
+            duplicate_code_min_lines=args.duplicate_code_min_lines,
+            duplicate_code_min_block_stmts=args.duplicate_code_min_block_stmts,
         )
     except (FileNotFoundError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
