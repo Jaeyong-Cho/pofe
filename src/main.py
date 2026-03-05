@@ -71,6 +71,13 @@ def main() -> None:
         help="Flag functions with N+ primitive-typed parameters as PrimitiveObsession (default: 5).",
     )
     parser.add_argument(
+        "--data-clump-size",
+        type=int,
+        default=3,
+        metavar="N",
+        help="Flag functions/classes sharing N+ names as DataClump (default: 3).",
+    )
+    parser.add_argument(
         "--format",
         choices=["text", "json"],
         default="text",
@@ -87,6 +94,7 @@ def main() -> None:
             large_class_field_threshold=args.large_class_field_threshold,
             type_code_threshold=args.type_code_threshold,
             primitive_param_threshold=args.primitive_param_threshold,
+            data_clump_size=args.data_clump_size,
         )
     except (FileNotFoundError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
