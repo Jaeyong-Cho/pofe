@@ -11,7 +11,7 @@ class SmellReport:
         - `file` is the path as given to `detect_smells`
         - `start_line` and `end_line` are 1-based
         - `line_count` equals `end_line - start_line + 1`
-        - `name` is the function name for LongMethod, the class name for LargeClass
+        - `name` is the function/class/scope name depending on the detector
 
     Assumptions:
         - Created only by internal detectors; not intended for manual construction.
@@ -26,3 +26,4 @@ class SmellReport:
     message: str
     method_count: int | None = field(default=None)
     field_count: int | None = field(default=None)
+    primitive_count: int | None = field(default=None)

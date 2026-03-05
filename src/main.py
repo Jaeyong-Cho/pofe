@@ -57,6 +57,20 @@ def main() -> None:
         help="Flag classes with more than N fields as LargeClass (default: 10).",
     )
     parser.add_argument(
+        "--type-code-threshold",
+        type=int,
+        default=3,
+        metavar="N",
+        help="Flag scopes with N+ ALL_CAPS primitive constants as PrimitiveObsession (default: 3).",
+    )
+    parser.add_argument(
+        "--primitive-param-threshold",
+        type=int,
+        default=5,
+        metavar="N",
+        help="Flag functions with N+ primitive-typed parameters as PrimitiveObsession (default: 5).",
+    )
+    parser.add_argument(
         "--format",
         choices=["text", "json"],
         default="text",
@@ -71,6 +85,8 @@ def main() -> None:
             large_class_line_threshold=args.large_class_line_threshold,
             large_class_method_threshold=args.large_class_method_threshold,
             large_class_field_threshold=args.large_class_field_threshold,
+            type_code_threshold=args.type_code_threshold,
+            primitive_param_threshold=args.primitive_param_threshold,
         )
     except (FileNotFoundError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
