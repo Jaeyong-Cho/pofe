@@ -1,0 +1,106 @@
+"""CLI entry point.
+
+Usage:
+    python -m src <path> [options]
+    python src/main.py <path> [options]
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+# Allow running as `python src/main.py` (no parent package context).
+if __name__ == "__main__" and __package__ is None:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from src import detect_smells
+else:
+    from . import detect_smells
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        prog="smell_detector",
+        description="Detect code smells in Python source files.",
+    )
+    parser.add_argument(
+        "path",
+        help="Python file or directory to scan.",
+    )
+    parser.add_argument(
+        "--long-method-threshold",
+        type=int,
+        default=20,
+        metavar="N",
+        help="Flag functions longer than N lines as LongMethod (default: 20).",
+    )
+    parser.add_argument(
+        "--large-class-line-threshold",
+        type=int,
+        default=200,
+        metavar="N",
+        help="Flag classes with more than N physical lines as LargeClass (default: 200).",
+    )
+    parser.add_argument(
+        "--large-class-method-threshold",
+        type=int,
+        default=20,
+        metavar="N",
+        help="Flag classes with more than N methods as LargeClass (default: 20).",
+    )
+    parser.add_argument(
+        "--large-class-field-threshold",
+        type=int,
+        default=10,
+        metavar="N",
+        help="Flag classes with more than N fields as LargeClass (default: 10).",
+    )
+    parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text).",
+    )
+    args = parser.parse_args()
+
+    try:
+        reports = detect_smells(
+            args.path,
+            long_method_threshold=args.long_method_threshold,
+            large_class_line_threshold=args.large_class_line_threshold,
+            large_class_method_threshold=args.large_class_method_threshold,
+            large_class_field_threshold=args.large_class_field_threshold,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.format == "json":
+        _print_json(reports)
+    else:
+        _print_text(reports)
+
+    sys.exit(1 if reports else 0)
+
+
+def _print_text(reports) -> None:
+    if not reports:
+        print("No code smells found.")
+        return
+
+    for r in reports:
+        print(f"{r.file}:{r.start_line}: [{r.smell}] {r.message}")
+
+    print(f"\n{len(reports)} smell(s) found.")
+
+
+def _print_json(reports) -> None:
+    import dataclasses
+    import json
+
+    print(json.dumps([dataclasses.asdict(r) for r in reports], indent=2))
+
+
+if __name__ == "__main__":
+    main()
