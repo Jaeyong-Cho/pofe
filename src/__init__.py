@@ -19,7 +19,9 @@ Public API:
                                            "PrimitiveObsession.TypeCode",
                                            "PrimitiveObsession.PrimitiveParameterCluster",
                                            "DataClump.ParameterClump",
-                                           "DataClump.FieldClump")
+                                           "DataClump.FieldClump",
+                                           "SwitchStatement.IfElseChain",
+                                           "SwitchStatement.ComplexMatch")
             file            : str        - source file path
             name            : str        - function, class, or scope name
             start_line      : int        - 1-based start line
@@ -30,6 +32,7 @@ Public API:
             field_count     : int|None   - number of fields   (LargeClass only)
             primitive_count : int|None   - number of primitives (PrimitiveObsession only)
             clump           : tuple|None - shared variable names (DataClump only)
+            branch_count    : int|None   - number of branches (SwitchStatement only)
 """
 
 from __future__ import annotations
@@ -43,6 +46,7 @@ from .large_class import detect as _detect_large_class
 from .long_method import detect as _detect_long_method
 from .models import SmellReport
 from .primitive_obsession import detect as _detect_primitive_obsession
+from .switch_statements import detect as _detect_switch_statements
 
 __all__ = ["SmellReport", "detect_smells"]
 
@@ -57,6 +61,8 @@ def detect_smells(
     type_code_threshold: int = 3,
     primitive_param_threshold: int = 5,
     data_clump_size: int = 3,
+    if_else_chain_threshold: int = 3,
+    match_case_threshold: int = 3,
 ) -> list[SmellReport]:
     """Detect code smells in a Python file or directory.
 
@@ -70,6 +76,8 @@ def detect_smells(
         type_code_threshold:         Flag scopes with this many+ ALL_CAPS primitive constants.
         primitive_param_threshold:   Flag functions with this many+ primitive-typed params.
         data_clump_size:             Minimum shared names to constitute a data clump.
+        if_else_chain_threshold:     Flag if/elif chains with this many+ total branches.
+        match_case_threshold:        Flag match statements with this many+ case clauses.
 
     Returns:
         A list of SmellReport sorted by (file, start_line).
@@ -77,7 +85,8 @@ def detect_smells(
 
     Raises:
         FileNotFoundError: If `path` does not exist.
-        ValueError: If any threshold is less than 1 (or data_clump_size < 2).
+        ValueError: If any threshold is less than 1 (or data_clump_size < 2,
+                    or if_else_chain_threshold / match_case_threshold < 2).
     """
     target = Path(path)
     if not target.exists():
@@ -108,6 +117,13 @@ def detect_smells(
         )
         all_param_data.extend(_collect_param_data(file))
         all_field_data.extend(_collect_field_data(file))
+        reports.extend(
+            _detect_switch_statements(
+                file,
+                if_else_chain_threshold=if_else_chain_threshold,
+                match_case_threshold=match_case_threshold,
+            )
+        )
 
     reports.extend(_detect_data_clumps(all_param_data, all_field_data, data_clump_size))
     reports.sort(key=lambda r: (r.file, r.start_line))

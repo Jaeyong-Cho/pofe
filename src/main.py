@@ -78,6 +78,20 @@ def main() -> None:
         help="Flag functions/classes sharing N+ names as DataClump (default: 3).",
     )
     parser.add_argument(
+        "--if-else-chain-threshold",
+        type=int,
+        default=3,
+        metavar="N",
+        help="Flag if/elif chains with N+ total branches as SwitchStatement (default: 3).",
+    )
+    parser.add_argument(
+        "--match-case-threshold",
+        type=int,
+        default=3,
+        metavar="N",
+        help="Flag match statements with N+ cases as SwitchStatement (default: 3).",
+    )
+    parser.add_argument(
         "--format",
         choices=["text", "json"],
         default="text",
@@ -95,6 +109,8 @@ def main() -> None:
             type_code_threshold=args.type_code_threshold,
             primitive_param_threshold=args.primitive_param_threshold,
             data_clump_size=args.data_clump_size,
+            if_else_chain_threshold=args.if_else_chain_threshold,
+            match_case_threshold=args.match_case_threshold,
         )
     except (FileNotFoundError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)

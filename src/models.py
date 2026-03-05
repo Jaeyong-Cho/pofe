@@ -28,3 +28,4 @@ class SmellReport:
     field_count: int | None = field(default=None)
     primitive_count: int | None = field(default=None)
     clump: tuple | None = field(default=None)
+    branch_count: int | None = field(default=None)
