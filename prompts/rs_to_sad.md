@@ -4,12 +4,14 @@ Given a software requirement, drive a justified architecture using structured re
 
 # Instructions
 - Identify **deep components**: define minimal, powerful interfaces that hide maximum implementation complexity.
-- Enforce **single responsibility**: each component owns one clearly bounded concern; split any component whose purpose requires "and".
-- Design for **information hiding**: internalize all data structures, algorithms, and decisions that callers need not know.
+- Enforce **one concept per module**: each component owns one clearly bounded concern. Split only when the separation reduces caller complexity. Never split by operation count, reuse speculation, or naming convenience.
+- **Decomposition is a tool, not a virtue**: prefer fewer, deeper modules. Every added interface must justify its existence by reducing total complexity for callers. More interfaces means more cognitive load.
+- Design for **information hiding**: internalize all data structures, algorithms, and decisions that callers need not know. If an implementation detail has no stable, caller-facing meaning, it is not an interface.
 - Prefer **general-purpose abstractions** over special-case designs; a slightly more general interface reduces overall system complexity.
-- Eliminate **shallow layers**: only introduce a component or interface if it provides meaningful abstraction over what it wraps.
+- Eliminate **shallow layers**: only introduce a component or interface if it provides meaningful abstraction over what it wraps. A component with one trivial operation is indirection, not abstraction.
 - Expose **errors and edge cases at the right level**: handle complexity deep inside components rather than leaking it to callers.
-- **Apply a design pattern** from the reference below to each component; record the choice and rationale in the ADR.
+- **Design it twice**: after your first design, attempt to merge any interface that has fewer than two meaningful operations. If merging does not increase caller complexity, merge.
+- **Apply design patterns sparingly**: only apply a pattern when it reduces caller complexity or absorbs volatility. Patterns are not required for every component. Record only patterns with real architectural impact in the ADR.
 
 # Design Patterns Reference
 ## Creational
