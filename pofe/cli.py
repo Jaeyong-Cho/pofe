@@ -149,6 +149,36 @@ def _format_req_table(reqs: list) -> list[str]:
     return rows
 
 
+def cmd_req_edit(args: argparse.Namespace) -> None:
+    from pofe.editor_adapter import open_editor
+    from pofe.requirement_store import get_requirement, format_as_markdown, update_requirement
+
+    try:
+        req = get_requirement(args.id)
+    except (FileNotFoundError, KeyError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        edited_content = open_editor(initial_content=format_as_markdown(req))
+    except OSError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        update_requirement(req["id"], edited_content)
+        print(f"Updated: {req['id']}")
+    except ValueError as e:
+        print(f"Validation error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except (FileNotFoundError, KeyError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except OSError as e:
+        print(f"Storage error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_req_delete(args: argparse.Namespace) -> None:
     from pofe.requirement_store import delete_requirement
 
@@ -179,6 +209,9 @@ def main() -> None:
     list_parser.add_argument("--tag", metavar="TAG", help="Filter by tag.")
     list_parser.add_argument("-o", "--output", metavar="FILE", help="Export results to a file.")
 
+    edit_parser = req_sub.add_parser("edit", help="Open editor to modify an existing requirement.")
+    edit_parser.add_argument("id", help="Requirement ID (full or prefix) or title.")
+
     del_parser = req_sub.add_parser("delete", help="Delete a requirement by ID.")
     del_parser.add_argument("id", help="64-char requirement ID.")
     del_parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompt.")
@@ -199,6 +232,8 @@ def main() -> None:
             cmd_req_create(args)
         elif args.req_command == "list":
             cmd_req_list(args)
+        elif args.req_command == "edit":
+            cmd_req_edit(args)
         elif args.req_command == "delete":
             cmd_req_delete(args)
         elif args.req_command == "analyze":

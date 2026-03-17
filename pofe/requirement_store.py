@@ -228,6 +228,41 @@ def list_requirements(
     return results
 
 
+def update_requirement(req_id: str, content: str) -> None:
+    """Parse, validate, and overwrite an existing requirement by ID.
+
+    Guarantees: the entry in rsdb.json is updated in place; updated_at is refreshed.
+    Assumes: .pofe directory exists; req_id is the full 64-char ID.
+    Fails: raises ValueError if required template fields are missing;
+           raises FileNotFoundError if rsdb.json is missing;
+           raises KeyError if req_id is not found;
+           raises OSError on write failure.
+    """
+    rsdb_path = _find_pofe_dir() / "data" / "rsdb.json"
+
+    if not rsdb_path.exists():
+        raise FileNotFoundError("rsdb.json not found. No requirements stored.")
+
+    with open(rsdb_path) as f:
+        db = json.load(f)
+
+    if req_id not in db:
+        raise KeyError(f"Requirement '{req_id}' not found.")
+
+    fields = _parse(content)
+    now = datetime.now(timezone.utc).isoformat()
+
+    entry = db[req_id]
+    entry["title"] = fields["title"]
+    entry["why"] = fields["why"]
+    entry["what"] = fields["what"]
+    entry["how"] = fields["how"]
+    entry["updated_at"] = now
+
+    with open(rsdb_path, "w") as f:
+        json.dump(db, f, indent=2)
+
+
 def delete_requirement(req_id: str, *, confirm: bool = True) -> None:
     """Remove a requirement from rsdb.json by ID.
 

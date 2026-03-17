@@ -23,8 +23,8 @@ _TEMPLATE = """\
 """
 
 
-def open_editor() -> str:
-    """Open the user's preferred editor with a blank requirement template.
+def open_editor(initial_content: str | None = None) -> str:
+    """Open the user's preferred editor with a requirement template or existing content.
 
     Guarantees: returns the full file contents after the editor closes.
     Assumes: $EDITOR or vi is available on PATH.
@@ -32,7 +32,7 @@ def open_editor() -> str:
     """
     editor = os.environ.get("EDITOR", "vi")
     with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False) as f:
-        f.write(_TEMPLATE)
+        f.write(initial_content if initial_content is not None else _TEMPLATE)
         tmp_path = f.name
     try:
         result = subprocess.run([*shlex.split(editor), tmp_path])
