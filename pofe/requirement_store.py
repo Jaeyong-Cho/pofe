@@ -110,6 +110,69 @@ def append_requirement(content: str, username: str) -> str:
     return req_id
 
 
+def get_requirement(id_or_title: str) -> dict:
+    """Retrieve a stored requirement by ID (full or prefix) or by exact title.
+
+    Guarantees: returns the matching requirement dict.
+    Assumes: rsdb.json exists.
+    Fails: raises FileNotFoundError if rsdb.json is missing;
+           raises KeyError if no match or ambiguous prefix/title.
+    """
+    rsdb_path = _find_pofe_dir() / "data" / "rsdb.json"
+    if not rsdb_path.exists():
+        raise FileNotFoundError("rsdb.json not found. No requirements stored.")
+
+    with open(rsdb_path) as f:
+        db = json.load(f)
+
+    # Exact ID match
+    if id_or_title in db:
+        return db[id_or_title]
+
+    # Prefix ID match
+    id_matches = [v for k, v in db.items() if k.startswith(id_or_title)]
+    if len(id_matches) == 1:
+        return id_matches[0]
+    if len(id_matches) > 1:
+        raise KeyError(f"Ambiguous ID prefix '{id_or_title}': matches {len(id_matches)} requirements.")
+
+    # Title match (case-insensitive)
+    title_matches = [v for v in db.values() if v.get("title", "").lower() == id_or_title.lower()]
+    if len(title_matches) == 1:
+        return title_matches[0]
+    if len(title_matches) > 1:
+        raise KeyError(f"Ambiguous title '{id_or_title}': matches {len(title_matches)} requirements.")
+
+    raise KeyError(f"No requirement found for '{id_or_title}'.")
+
+
+def format_as_markdown(req: dict) -> str:
+    """Render a stored requirement dict back into the standard markdown format."""
+    why = req.get("why", {})
+    what = req.get("what", {})
+    how = req.get("how", {})
+
+    lines = [
+        f"# {req.get('title', '')}",
+        "",
+        "## Why",
+        f"- Problem: {why.get('problem', '')}",
+        f"- Hypothesis: {why.get('hypothesis', '')}",
+        f"- Expect: {why.get('expect', '')}",
+        "",
+        "## What",
+        f"- Input: {what.get('input', '')}",
+        f"- Process: {what.get('process', '')}",
+        f"- Output: {what.get('output', '')}",
+        "",
+        "## How",
+        f"- Constraints: {how.get('constraints', '')}",
+        f"- Approach: {how.get('approach', '')}",
+        f"- Acceptance Criteria: {how.get('acceptance_criteria', '')}",
+    ]
+    return "\n".join(lines)
+
+
 def delete_requirement(req_id: str, *, confirm: bool = True) -> None:
     """Remove a requirement from rsdb.json by ID.
 

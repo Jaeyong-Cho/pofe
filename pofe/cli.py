@@ -1,4 +1,5 @@
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
@@ -36,6 +37,45 @@ def cmd_req_create(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_req_analyze(args: argparse.Namespace) -> None:
+    from pofe.requirement_store import get_requirement, format_as_markdown
+    from pofe.editor_adapter import open_editor
+
+    if args.requirement:
+        try:
+            req = get_requirement(args.requirement)
+            content = format_as_markdown(req)
+        except (FileNotFoundError, KeyError) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        try:
+            content = open_editor()
+        except (FileNotFoundError, ValueError) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    prompt_path = Path(__file__).parent / "prompts" / "analyze_rs.md"
+    try:
+        system_prompt = prompt_path.read_text()
+    except OSError as e:
+        print(f"Prompt file error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    full_prompt = system_prompt + content
+
+    cmd = [
+        "copilot", "-s",
+        "--stream", "on",
+        "--model", "gpt-4.1",
+        "--allow-all-paths",
+        "--allow-tool", "read",
+        "-p", full_prompt,
+    ]
+    result = subprocess.run(cmd)
+    sys.exit(result.returncode)
+
+
 def cmd_req_delete(args: argparse.Namespace) -> None:
     from pofe.requirement_store import delete_requirement
 
@@ -64,6 +104,13 @@ def main() -> None:
     del_parser.add_argument("id", help="64-char requirement ID.")
     del_parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompt.")
 
+    analyze_parser = req_sub.add_parser("analyze", help="Analyze a requirement using AI.")
+    analyze_parser.add_argument(
+        "requirement",
+        nargs="?",
+        help="Requirement ID (full or prefix) or title. If omitted, opens editor for raw input.",
+    )
+
     args = parser.parse_args()
 
     if args.command == "init":
@@ -73,6 +120,8 @@ def main() -> None:
             cmd_req_create(args)
         elif args.req_command == "delete":
             cmd_req_delete(args)
+        elif args.req_command == "analyze":
+            cmd_req_analyze(args)
         else:
             req_parser.print_help()
     else:

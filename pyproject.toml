@@ -12,3 +12,6 @@ pofe = "pofe.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["pofe*"]
+
+[tool.setuptools.package-data]
+pofe = ["prompts/*.md"]
