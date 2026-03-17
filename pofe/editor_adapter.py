@@ -22,6 +22,8 @@ _TEMPLATE = """\
 - Constraints: {The previous system, polish, technical constraints.}
 - Approach: {The big picture of logic flow or data flow.}
 - Acceptance Criteria: {The acceptance criteria of this requirement.}
+
+## Related RS
 """
 
 

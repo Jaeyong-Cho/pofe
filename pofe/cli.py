@@ -246,6 +246,32 @@ def cmd_tag_delete(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_req_related(args: argparse.Namespace) -> None:
+    from pofe.requirement_store import get_requirement, get_related_requirements
+
+    try:
+        req = get_requirement(args.id)
+        related = get_related_requirements(args.id)
+    except (FileNotFoundError, KeyError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    titles = req.get("related_rs") or []
+    if not titles:
+        print("No related requirements.")
+        return
+
+    print(f"Related requirements for: {req['title']}")
+    print()
+    resolved_by_title = {r.get("title", "").lower(): r for r in related}
+    for title in titles:
+        match = resolved_by_title.get(title.lower())
+        if match:
+            print(f"  [{match['id'][:8]}] {title}")
+        else:
+            print(f"  [unresolved] {title}")
+
+
 def cmd_req_delete(args: argparse.Namespace) -> None:
     from pofe.requirement_store import delete_requirement
 
@@ -296,6 +322,9 @@ def main() -> None:
     del_parser.add_argument("id", help="64-char requirement ID.")
     del_parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompt.")
 
+    related_parser = req_sub.add_parser("related", help="Show related requirements for a given requirement.")
+    related_parser.add_argument("id", help="Requirement ID (full or prefix) or title.")
+
     analyze_parser = req_sub.add_parser("analyze", help="Analyze a requirement using AI.")
     analyze_parser.add_argument(
         "requirement",
@@ -325,6 +354,8 @@ def main() -> None:
             cmd_req_edit(args)
         elif args.req_command == "delete":
             cmd_req_delete(args)
+        elif args.req_command == "related":
+            cmd_req_related(args)
         elif args.req_command == "analyze":
             cmd_req_analyze(args)
         else:

@@ -40,6 +40,25 @@ def _extract_bullet(text: str, label: str) -> str:
     return "\n".join(sub_items)
 
 
+def _parse_related_rs(content: str) -> list[str]:
+    """Extract related requirement titles from the '## Related RS' section.
+
+    Guarantees: returns a list of non-empty title strings; returns [] if the
+                section is absent or contains no valid bullet items.
+    """
+    m = re.search(r"## Related RS\n(.*?)(?=\n## |\Z)", content, re.DOTALL)
+    if not m:
+        return []
+    items = []
+    for line in m.group(1).splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            title = stripped[2:].strip()
+            if title:
+                items.append(title)
+    return items
+
+
 def _parse(content: str) -> dict:
     title_match = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
     title = title_match.group(1).strip() if title_match else ""
@@ -75,6 +94,7 @@ def _parse(content: str) -> dict:
             "acceptance_criteria": _extract_bullet(how, "Acceptance Criteria"),
         },
         "tags": tags,
+        "related_rs": _parse_related_rs(content),
     }
 
     missing = []
@@ -115,6 +135,7 @@ def append_requirement(content: str, username: str) -> str:
         "what": fields["what"],
         "how": fields["how"],
         "tags": fields["tags"],
+        "related_rs": fields["related_rs"],
         "created_at": now,
         "updated_at": now,
         "user": username,
@@ -178,6 +199,8 @@ def format_as_markdown(req: dict) -> str:
 
     tags_str = ", ".join(req.get("tags") or [])
 
+    related = req.get("related_rs") or []
+
     lines = [
         f"# {req.get('title', '')}",
         "",
@@ -197,6 +220,9 @@ def format_as_markdown(req: dict) -> str:
         f"- Constraints: {how.get('constraints', '')}",
         f"- Approach: {how.get('approach', '')}",
         f"- Acceptance Criteria: {how.get('acceptance_criteria', '')}",
+        "",
+        "## Related RS",
+        *[f"- {title}" for title in related],
     ]
     return "\n".join(lines)
 
@@ -269,6 +295,7 @@ def update_requirement(req_id: str, content: str) -> None:
     entry["what"] = fields["what"]
     entry["how"] = fields["how"]
     entry["tags"] = fields["tags"]
+    entry["related_rs"] = fields["related_rs"]
     entry["updated_at"] = now
 
     with open(rsdb_path, "w") as f:
@@ -429,3 +456,33 @@ def delete_requirement(req_id: str, *, confirm: bool = True) -> None:
         json.dump(db, f, indent=2)
 
     print(f"Deleted: {req_id}")
+
+
+def get_related_requirements(id_or_title: str) -> list[dict]:
+    """Return requirements listed in the related_rs field of the given requirement.
+
+    Each title in related_rs is resolved by exact case-insensitive title match.
+    Titles that do not resolve to any stored requirement are silently skipped.
+
+    Guarantees: returns a list of requirement dicts; order follows related_rs list.
+    Assumes: rsdb.json exists.
+    Fails: raises FileNotFoundError if rsdb.json is missing;
+           raises KeyError if id_or_title is not found.
+    """
+    req = get_requirement(id_or_title)
+    related_titles = req.get("related_rs") or []
+    if not related_titles:
+        return []
+
+    rsdb_path = _find_pofe_dir() / "data" / "rsdb.json"
+    with open(rsdb_path) as f:
+        db = json.load(f)
+
+    all_reqs = list(db.values())
+    resolved = []
+    for title in related_titles:
+        title_lower = title.lower()
+        matches = [r for r in all_reqs if r.get("title", "").lower() == title_lower]
+        if len(matches) == 1:
+            resolved.append(matches[0])
+    return resolved
