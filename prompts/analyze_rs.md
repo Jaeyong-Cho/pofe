@@ -5,13 +5,17 @@ Analyze it and return a well written software requirement specification.
 # Instructions
 1. Analyze user input and return software requirement with following format.
 2. Rewrite the user input with all sections filled in and improved.
-3. Request to the user for about ambiguous point.
-4. Review the potential issue.
-5. Review the problem scope is too broad or too narrow.
+3. Assign 2–5 tags that capture the core meaning of the requirement. Each tag must be a single lowercase word. Choose tags that are compact and meaningful — they should allow grouping related requirements at a glance.
+4. Request to the user for about ambiguous point.
+5. Review the potential issue.
+6. Review the problem scope is too broad or too narrow.
 
 # Output Format
 ```
 # {Title}
+
+- Tags: {2–5 single-word lowercase tags, comma-separated}
+
 ## Why
 - Problem: The problem to resolve with this project.
 - Hyphthesis: The hypothesis of this requirement to resolve problem.

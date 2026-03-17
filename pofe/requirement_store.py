@@ -52,6 +52,11 @@ def _parse(content: str) -> dict:
     what = section("What")
     how = section("How")
 
+    raw_tags = _extract_bullet(content, "Tags")
+    tags = list(dict.fromkeys(
+        t.strip().lower() for t in raw_tags.split(",") if t.strip()
+    ))
+
     fields = {
         "title": title,
         "why": {
@@ -69,6 +74,7 @@ def _parse(content: str) -> dict:
             "approach": _extract_bullet(how, "Approach"),
             "acceptance_criteria": _extract_bullet(how, "Acceptance Criteria"),
         },
+        "tags": tags,
     }
 
     missing = []
@@ -108,6 +114,7 @@ def append_requirement(content: str, username: str) -> str:
         "why": fields["why"],
         "what": fields["what"],
         "how": fields["how"],
+        "tags": fields["tags"],
         "created_at": now,
         "updated_at": now,
         "user": username,
@@ -169,8 +176,12 @@ def format_as_markdown(req: dict) -> str:
     what = req.get("what", {})
     how = req.get("how", {})
 
+    tags_str = ", ".join(req.get("tags") or [])
+
     lines = [
         f"# {req.get('title', '')}",
+        "",
+        f"- Tags: {tags_str}",
         "",
         "## Why",
         f"- Problem: {why.get('problem', '')}",
@@ -257,6 +268,7 @@ def update_requirement(req_id: str, content: str) -> None:
     entry["why"] = fields["why"]
     entry["what"] = fields["what"]
     entry["how"] = fields["how"]
+    entry["tags"] = fields["tags"]
     entry["updated_at"] = now
 
     with open(rsdb_path, "w") as f:

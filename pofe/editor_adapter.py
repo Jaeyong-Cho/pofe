@@ -6,6 +6,8 @@ import tempfile
 _TEMPLATE = """\
 # Title
 
+- Tags:
+
 ## Why
 - Problem: {The problem to resolve with this project.}
 - Hypothesis: {The hypothesis of this requirement to resolve problem.}
