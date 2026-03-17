@@ -19,8 +19,25 @@ def _generate_id(timestamp: str, username: str) -> str:
 
 
 def _extract_bullet(text: str, label: str) -> str:
-    match = re.search(rf"- {re.escape(label)}:[ \t]*([^\n]+)", text)
-    return match.group(1).strip() if match else ""
+    match = re.search(rf"- {re.escape(label)}:[ \t]*([^\n]*)", text)
+    if not match:
+        return ""
+
+    inline = match.group(1).strip()
+    if inline:
+        return inline
+
+    # No inline value — collect immediately following indented sub-list items.
+    sub_items = []
+    for line in text[match.end():].split("\n"):
+        if not line.strip():
+            continue
+        if re.match(r"^[ \t]+-", line):
+            sub_items.append(re.sub(r"^[ \t]+-[ \t]*", "", line))
+        else:
+            break
+
+    return "\n".join(sub_items)
 
 
 def _parse(content: str) -> dict:
