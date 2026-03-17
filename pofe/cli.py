@@ -21,12 +21,16 @@ def cmd_init(args: argparse.Namespace) -> None:
 
 def cmd_req_create(args: argparse.Namespace) -> None:
     from pofe.editor_adapter import open_editor
-    from pofe.requirement_store import append_requirement
+    from pofe.requirement_store import append_requirement, list_all_tags
     from pofe.user_manager import get_username
 
     try:
         username = get_username()
-        content = open_editor()
+        try:
+            available_tags = [t["name"] for t in list_all_tags()]
+        except FileNotFoundError:
+            available_tags = []
+        content = open_editor(available_tags=available_tags)
         req_id = append_requirement(content, username)
         print(f"Created: {req_id}")
     except (FileNotFoundError, ValueError) as e:
@@ -151,7 +155,7 @@ def _format_req_table(reqs: list) -> list[str]:
 
 def cmd_req_edit(args: argparse.Namespace) -> None:
     from pofe.editor_adapter import open_editor
-    from pofe.requirement_store import get_requirement, format_as_markdown, update_requirement
+    from pofe.requirement_store import get_requirement, format_as_markdown, update_requirement, list_all_tags
 
     try:
         req = get_requirement(args.id)
@@ -160,7 +164,12 @@ def cmd_req_edit(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     try:
-        edited_content = open_editor(initial_content=format_as_markdown(req))
+        available_tags = [t["name"] for t in list_all_tags()]
+    except FileNotFoundError:
+        available_tags = []
+
+    try:
+        edited_content = open_editor(initial_content=format_as_markdown(req), available_tags=available_tags)
     except OSError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -172,6 +181,64 @@ def cmd_req_edit(args: argparse.Namespace) -> None:
         print(f"Validation error: {e}", file=sys.stderr)
         sys.exit(1)
     except (FileNotFoundError, KeyError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except OSError as e:
+        print(f"Storage error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_tag_list(args: argparse.Namespace) -> None:
+    from pofe.requirement_store import list_all_tags
+
+    try:
+        tags = list_all_tags()
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if not tags:
+        print("No tags found.")
+        return
+
+    col_name = max(max(len(t["name"]) for t in tags), 3)
+    header = f"{'TAG':<{col_name}}  COUNT"
+    separator = "-" * len(header)
+    print(header)
+    print(separator)
+    for t in tags:
+        print(f"{t['name']:<{col_name}}  {t['count']}")
+    print(separator)
+    print(f"{len(tags)} tag(s).")
+
+
+def cmd_tag_rename(args: argparse.Namespace) -> None:
+    from pofe.requirement_store import rename_tag
+
+    try:
+        count = rename_tag(args.old, args.new)
+        print(f"Renamed '{args.old}' to '{args.new}' in {count} requirement(s).")
+    except (FileNotFoundError, KeyError, ValueError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except OSError as e:
+        print(f"Storage error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_tag_delete(args: argparse.Namespace) -> None:
+    from pofe.requirement_store import delete_tag
+
+    if not args.yes:
+        answer = input(f"Delete tag '{args.name}' from all requirements? [y/N] ")
+        if answer.strip().lower() != "y":
+            print("Aborted.")
+            return
+
+    try:
+        count = delete_tag(args.name)
+        print(f"Deleted tag '{args.name}' from {count} requirement(s).")
+    except (FileNotFoundError, KeyError, ValueError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
     except OSError as e:
@@ -201,6 +268,19 @@ def main() -> None:
     req_parser = sub.add_parser("req", help="Manage requirement specifications.")
     req_sub = req_parser.add_subparsers(dest="req_command")
 
+    tag_parser = sub.add_parser("tag", help="Manage tags across all requirements.")
+    tag_sub = tag_parser.add_subparsers(dest="tag_command")
+
+    tag_sub.add_parser("list", help="List all tags with usage counts.")
+
+    rename_parser = tag_sub.add_parser("rename", help="Rename a tag across all requirements.")
+    rename_parser.add_argument("old", help="Current tag name.")
+    rename_parser.add_argument("new", help="New tag name.")
+
+    tag_del_parser = tag_sub.add_parser("delete", help="Remove a tag from all requirements.")
+    tag_del_parser.add_argument("name", help="Tag name to delete.")
+    tag_del_parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompt.")
+
     req_sub.add_parser("create", help="Open editor and store a new requirement.")
 
     list_parser = req_sub.add_parser("list", help="List stored requirements.")
@@ -227,6 +307,15 @@ def main() -> None:
 
     if args.command == "init":
         cmd_init(args)
+    elif args.command == "tag":
+        if args.tag_command == "list":
+            cmd_tag_list(args)
+        elif args.tag_command == "rename":
+            cmd_tag_rename(args)
+        elif args.tag_command == "delete":
+            cmd_tag_delete(args)
+        else:
+            tag_parser.print_help()
     elif args.command == "req":
         if args.req_command == "create":
             cmd_req_create(args)

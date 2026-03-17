@@ -275,6 +275,127 @@ def update_requirement(req_id: str, content: str) -> None:
         json.dump(db, f, indent=2)
 
 
+def list_all_tags() -> list[dict]:
+    """Return all unique tags aggregated across requirements with usage counts.
+
+    Guarantees: returns a list of {"name": str, "count": int} sorted by count
+                descending, then name ascending; never raises on missing tags field.
+    Assumes: .pofe directory exists.
+    Fails: raises FileNotFoundError if rsdb.json is missing.
+    """
+    rsdb_path = _find_pofe_dir() / "data" / "rsdb.json"
+    if not rsdb_path.exists():
+        raise FileNotFoundError("rsdb.json not found. No requirements stored.")
+
+    with open(rsdb_path) as f:
+        db = json.load(f)
+
+    counts: dict[str, int] = {}
+    for req in db.values():
+        for tag in req.get("tags", []):
+            counts[tag] = counts.get(tag, 0) + 1
+
+    return sorted(
+        [{"name": name, "count": count} for name, count in counts.items()],
+        key=lambda t: (-t["count"], t["name"]),
+    )
+
+
+def rename_tag(old_name: str, new_name: str) -> int:
+    """Rename a tag across all requirements.
+
+    Guarantees: all occurrences of old_name are replaced with new_name;
+                deduplication is applied when new_name already exists on a requirement;
+                updated_at is refreshed for each modified requirement;
+                returns count of modified requirements.
+    Assumes: .pofe directory exists; tag names are non-empty strings.
+    Fails: raises FileNotFoundError if rsdb.json is missing;
+           raises KeyError if old_name does not exist in any requirement;
+           raises ValueError if either name is empty or old_name == new_name;
+           raises OSError on write failure.
+    """
+    old_name = old_name.strip().lower()
+    new_name = new_name.strip().lower()
+
+    if not old_name or not new_name:
+        raise ValueError("Tag names must be non-empty.")
+    if old_name == new_name:
+        raise ValueError(f"Old and new tag names are identical: '{old_name}'.")
+
+    rsdb_path = _find_pofe_dir() / "data" / "rsdb.json"
+    if not rsdb_path.exists():
+        raise FileNotFoundError("rsdb.json not found. No requirements stored.")
+
+    with open(rsdb_path) as f:
+        db = json.load(f)
+
+    if not any(old_name in req.get("tags", []) for req in db.values()):
+        raise KeyError(f"Tag '{old_name}' not found.")
+
+    now = datetime.now(timezone.utc).isoformat()
+    modified = 0
+    for req in db.values():
+        tags = req.get("tags", [])
+        if old_name not in tags:
+            continue
+        seen: set[str] = set()
+        new_tags = []
+        for t in tags:
+            resolved = new_name if t == old_name else t
+            if resolved not in seen:
+                new_tags.append(resolved)
+                seen.add(resolved)
+        req["tags"] = new_tags
+        req["updated_at"] = now
+        modified += 1
+
+    with open(rsdb_path, "w") as f:
+        json.dump(db, f, indent=2)
+
+    return modified
+
+
+def delete_tag(name: str) -> int:
+    """Remove a tag from all requirements.
+
+    Guarantees: all occurrences of name are removed from every requirement;
+                updated_at is refreshed for each modified requirement;
+                returns count of modified requirements.
+    Assumes: .pofe directory exists.
+    Fails: raises FileNotFoundError if rsdb.json is missing;
+           raises KeyError if name does not exist in any requirement;
+           raises ValueError if name is empty;
+           raises OSError on write failure.
+    """
+    name = name.strip().lower()
+    if not name:
+        raise ValueError("Tag name must be non-empty.")
+
+    rsdb_path = _find_pofe_dir() / "data" / "rsdb.json"
+    if not rsdb_path.exists():
+        raise FileNotFoundError("rsdb.json not found. No requirements stored.")
+
+    with open(rsdb_path) as f:
+        db = json.load(f)
+
+    if not any(name in req.get("tags", []) for req in db.values()):
+        raise KeyError(f"Tag '{name}' not found.")
+
+    now = datetime.now(timezone.utc).isoformat()
+    modified = 0
+    for req in db.values():
+        tags = req.get("tags", [])
+        if name in tags:
+            req["tags"] = [t for t in tags if t != name]
+            req["updated_at"] = now
+            modified += 1
+
+    with open(rsdb_path, "w") as f:
+        json.dump(db, f, indent=2)
+
+    return modified
+
+
 def delete_requirement(req_id: str, *, confirm: bool = True) -> None:
     """Remove a requirement from rsdb.json by ID.
 

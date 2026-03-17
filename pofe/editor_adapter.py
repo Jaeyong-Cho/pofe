@@ -25,16 +25,24 @@ _TEMPLATE = """\
 """
 
 
-def open_editor(initial_content: str | None = None) -> str:
+def open_editor(initial_content: str | None = None, available_tags: list[str] | None = None) -> str:
     """Open the user's preferred editor with a requirement template or existing content.
+
+    When available_tags is provided, a hint listing existing tags is injected
+    immediately before the "- Tags:" line so the user can reuse them. The hint
+    is an HTML comment and is ignored by the requirement parser.
 
     Guarantees: returns the full file contents after the editor closes.
     Assumes: $EDITOR or vi is available on PATH.
     Fails: raises OSError if the editor process fails or the temp file is unreadable.
     """
     editor = os.environ.get("EDITOR", "vi")
+    content = initial_content if initial_content is not None else _TEMPLATE
+    if available_tags:
+        hint = f"<!-- Available tags: {', '.join(available_tags)} -->\n"
+        content = content.replace("- Tags:", hint + "- Tags:", 1)
     with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False) as f:
-        f.write(initial_content if initial_content is not None else _TEMPLATE)
+        f.write(content)
         tmp_path = f.name
     try:
         result = subprocess.run([*shlex.split(editor), tmp_path])
