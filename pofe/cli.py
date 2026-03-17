@@ -76,6 +76,79 @@ def cmd_req_analyze(args: argparse.Namespace) -> None:
     sys.exit(result.returncode)
 
 
+def cmd_req_list(args: argparse.Namespace) -> None:
+    from pofe.requirement_store import list_requirements
+
+    try:
+        reqs = list_requirements(
+            owner=args.owner,
+            status=args.status,
+            tag=args.tag,
+        )
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if not reqs:
+        print("No requirements found.")
+        return
+
+    lines = _format_req_table(reqs)
+    output = "\n".join(lines)
+    print(output)
+
+    if args.output:
+        try:
+            Path(args.output).write_text(output + "\n")
+            print(f"\nExported to {args.output}")
+        except OSError as e:
+            print(f"Export error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+
+def _format_req_table(reqs: list) -> list[str]:
+    """Render requirements as a fixed-width table for terminal display."""
+    col_id = 8
+    col_title = max(len(r.get("title", "")) for r in reqs)
+    col_title = min(max(col_title, 5), 50)
+    col_owner = max((len(r.get("user", "")) for r in reqs), default=5)
+    col_owner = max(col_owner, 5)
+
+    header = (
+        f"{'ID':<{col_id}}  "
+        f"{'TITLE':<{col_title}}  "
+        f"{'OWNER':<{col_owner}}  "
+        f"{'CREATED':<10}"
+    )
+    separator = "-" * len(header)
+
+    rows = [header, separator]
+    for r in reqs:
+        short_id = r.get("id", "")[:col_id]
+        title = r.get("title", "")[:col_title]
+        owner = r.get("user", "")[:col_owner]
+        created = r.get("created_at", "")[:10]
+        row = (
+            f"{short_id:<{col_id}}  "
+            f"{title:<{col_title}}  "
+            f"{owner:<{col_owner}}  "
+            f"{created:<10}"
+        )
+        # Append optional fields so they don't clutter the fixed columns.
+        extras = []
+        if r.get("status"):
+            extras.append(f"status={r['status']}")
+        if r.get("tags"):
+            extras.append(f"tags={','.join(r['tags'])}")
+        if extras:
+            row += "  " + "  ".join(extras)
+        rows.append(row)
+
+    rows.append(separator)
+    rows.append(f"{len(reqs)} requirement(s) listed.")
+    return rows
+
+
 def cmd_req_delete(args: argparse.Namespace) -> None:
     from pofe.requirement_store import delete_requirement
 
@@ -100,6 +173,12 @@ def main() -> None:
 
     req_sub.add_parser("create", help="Open editor and store a new requirement.")
 
+    list_parser = req_sub.add_parser("list", help="List stored requirements.")
+    list_parser.add_argument("--owner", metavar="USER", help="Filter by owner username.")
+    list_parser.add_argument("--status", metavar="STATUS", help="Filter by status value.")
+    list_parser.add_argument("--tag", metavar="TAG", help="Filter by tag.")
+    list_parser.add_argument("-o", "--output", metavar="FILE", help="Export results to a file.")
+
     del_parser = req_sub.add_parser("delete", help="Delete a requirement by ID.")
     del_parser.add_argument("id", help="64-char requirement ID.")
     del_parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompt.")
@@ -118,6 +197,8 @@ def main() -> None:
     elif args.command == "req":
         if args.req_command == "create":
             cmd_req_create(args)
+        elif args.req_command == "list":
+            cmd_req_list(args)
         elif args.req_command == "delete":
             cmd_req_delete(args)
         elif args.req_command == "analyze":

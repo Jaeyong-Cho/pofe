@@ -190,6 +190,44 @@ def format_as_markdown(req: dict) -> str:
     return "\n".join(lines)
 
 
+def list_requirements(
+    *,
+    owner: str | None = None,
+    status: str | None = None,
+    tag: str | None = None,
+) -> list[dict]:
+    """Return all stored requirements, optionally filtered.
+
+    Guarantees: returns a list sorted by created_at descending; never raises on
+                missing optional fields (status, tags) – those records are simply
+                excluded when the filter is specified.
+    Assumes: .pofe directory exists.
+    Fails: raises FileNotFoundError if rsdb.json is missing.
+    """
+    rsdb_path = _find_pofe_dir() / "data" / "rsdb.json"
+    if not rsdb_path.exists():
+        raise FileNotFoundError("rsdb.json not found. No requirements stored.")
+
+    with open(rsdb_path) as f:
+        db = json.load(f)
+
+    results = list(db.values())
+
+    if owner is not None:
+        results = [r for r in results if r.get("user", "").lower() == owner.lower()]
+    if status is not None:
+        results = [r for r in results if r.get("status", "").lower() == status.lower()]
+    if tag is not None:
+        tag_lower = tag.lower()
+        results = [
+            r for r in results
+            if tag_lower in [t.lower() for t in r.get("tags", [])]
+        ]
+
+    results.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+    return results
+
+
 def delete_requirement(req_id: str, *, confirm: bool = True) -> None:
     """Remove a requirement from rsdb.json by ID.
 
