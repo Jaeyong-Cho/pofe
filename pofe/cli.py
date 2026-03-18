@@ -42,8 +42,10 @@ def cmd_req_create(args: argparse.Namespace) -> None:
 
 
 def cmd_req_analyze(args: argparse.Namespace) -> None:
-    from pofe.requirement_store import get_requirement, format_as_markdown
+    from pofe.requirement_store import get_requirement, format_as_markdown, find_requirements_by_tags
     from pofe.editor_adapter import open_editor
+
+    related_context = ""
 
     if args.requirement:
         try:
@@ -52,6 +54,21 @@ def cmd_req_analyze(args: argparse.Namespace) -> None:
         except (FileNotFoundError, KeyError) as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
+
+        try:
+            related = find_requirements_by_tags(req.get("tags", []), exclude_id=req["id"])
+            if related:
+                parts = [
+                    "\n## Related Requirements (Context)\n",
+                    "The following requirements share tags with the one being analyzed."
+                    " Use them for context only.\n",
+                ]
+                for r in related:
+                    parts.append("\n" + format_as_markdown(r) + "\n\n---")
+                parts.append("\n\n## Requirement to Analyze\n\n")
+                related_context = "\n".join(parts)
+        except FileNotFoundError:
+            pass
     else:
         try:
             content = open_editor()
@@ -66,7 +83,7 @@ def cmd_req_analyze(args: argparse.Namespace) -> None:
         print(f"Prompt file error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    full_prompt = system_prompt + content
+    full_prompt = system_prompt + related_context + content
 
     cmd = [
         "copilot", "-s",

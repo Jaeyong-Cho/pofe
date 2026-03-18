@@ -458,6 +458,41 @@ def delete_requirement(req_id: str, *, confirm: bool = True) -> None:
     print(f"Deleted: {req_id}")
 
 
+def find_requirements_by_tags(tags: list[str], *, exclude_id: str = "", limit: int = 10) -> list[dict]:
+    """Return requirements that share at least one tag with the given tag list.
+
+    Requirements are ranked by the number of shared tags (descending) so the
+    most relevant appear first. The requirement identified by exclude_id is
+    always excluded from results.
+
+    Guarantees: returns at most `limit` requirement dicts ordered by tag-overlap
+                count descending; returns [] when tags is empty.
+    Assumes: .pofe directory exists.
+    Fails: raises FileNotFoundError if rsdb.json is missing.
+    """
+    if not tags:
+        return []
+
+    rsdb_path = _find_pofe_dir() / "data" / "rsdb.json"
+    if not rsdb_path.exists():
+        raise FileNotFoundError("rsdb.json not found. No requirements stored.")
+
+    with open(rsdb_path) as f:
+        db = json.load(f)
+
+    tag_set = {t.lower() for t in tags}
+    scored: list[tuple[int, dict]] = []
+    for req_id, req in db.items():
+        if req_id == exclude_id:
+            continue
+        overlap = len(tag_set & {t.lower() for t in req.get("tags", [])})
+        if overlap > 0:
+            scored.append((overlap, req))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [req for _, req in scored[:limit]]
+
+
 def get_related_requirements(id_or_title: str) -> list[dict]:
     """Return requirements listed in the related_rs field of the given requirement.
 
