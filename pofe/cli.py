@@ -317,6 +317,23 @@ def cmd_req_related(args: argparse.Namespace) -> None:
             print(f"  [unresolved] {title}")
 
 
+def cmd_req_show(args: argparse.Namespace) -> None:
+    from pofe.requirement_store import get_requirement, format_as_markdown
+
+    try:
+        req = get_requirement(args.id)
+    except (FileNotFoundError, KeyError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"ID:      {req['id']}")
+    print(f"Owner:   {req.get('user', '')}")
+    print(f"Created: {req.get('created_at', '')[:10]}")
+    print(f"Updated: {req.get('updated_at', '')[:10]}")
+    print()
+    print(format_as_markdown(req))
+
+
 def cmd_req_delete(args: argparse.Namespace) -> None:
     from pofe.requirement_store import delete_requirement
 
@@ -360,6 +377,9 @@ def main() -> None:
     list_parser.add_argument("--tag", metavar="TAG", help="Filter by tag.")
     list_parser.add_argument("-o", "--output", metavar="FILE", help="Export results to a file.")
 
+    show_parser = req_sub.add_parser("show", help="Display a requirement specification.")
+    show_parser.add_argument("id", help="Requirement ID (full or prefix) or title.")
+
     edit_parser = req_sub.add_parser("edit", help="Open editor to modify an existing requirement.")
     edit_parser.add_argument("id", help="Requirement ID (full or prefix) or title.")
 
@@ -395,6 +415,8 @@ def main() -> None:
             cmd_req_create(args)
         elif args.req_command == "list":
             cmd_req_list(args)
+        elif args.req_command == "show":
+            cmd_req_show(args)
         elif args.req_command == "edit":
             cmd_req_edit(args)
         elif args.req_command == "delete":
