@@ -44,13 +44,16 @@ def cmd_req_create(args: argparse.Namespace) -> None:
 def cmd_req_analyze(args: argparse.Namespace) -> None:
     from pofe.requirement_store import get_requirement, format_as_markdown, find_requirements_by_tags
     from pofe.editor_adapter import open_editor
+    from pofe.history_logger import open_history_session, write_request, write_response
 
     related_context = ""
+    metadata: dict = {}
 
     if args.requirement:
         try:
             req = get_requirement(args.requirement)
             content = format_as_markdown(req)
+            metadata["requirement_id"] = req["id"]
         except (FileNotFoundError, KeyError) as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
@@ -85,6 +88,19 @@ def cmd_req_analyze(args: argparse.Namespace) -> None:
 
     full_prompt = system_prompt + related_context + content
 
+    try:
+        from pofe.user_manager import get_username
+        metadata["user"] = get_username()
+    except (FileNotFoundError, ValueError):
+        pass
+
+    try:
+        session_dir = open_history_session()
+        write_request(session_dir, full_prompt, metadata)
+    except (FileNotFoundError, OSError) as e:
+        print(f"History log error: {e}", file=sys.stderr)
+        sys.exit(1)
+
     cmd = [
         "copilot", "-s",
         "--stream", "on",
@@ -93,8 +109,20 @@ def cmd_req_analyze(args: argparse.Namespace) -> None:
         "--allow-tool", "read",
         "-p", full_prompt,
     ]
-    result = subprocess.run(cmd)
-    sys.exit(result.returncode)
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True, bufsize=1)
+    response_parts: list[str] = []
+    for line in proc.stdout:  # type: ignore[union-attr]
+        sys.stdout.write(line)
+        sys.stdout.flush()
+        response_parts.append(line)
+    proc.wait()
+
+    try:
+        write_response(session_dir, "".join(response_parts))
+    except OSError as e:
+        print(f"History log error: {e}", file=sys.stderr)
+
+    sys.exit(proc.returncode)
 
 
 def cmd_req_list(args: argparse.Namespace) -> None:
