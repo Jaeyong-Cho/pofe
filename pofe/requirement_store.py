@@ -181,6 +181,13 @@ def get_requirement(id_or_title: str) -> dict:
     if len(id_matches) > 1:
         raise KeyError(f"Ambiguous ID prefix '{id_or_title}': matches {len(id_matches)} requirements.")
 
+    # Substring ID match
+    sub_matches = [v for k, v in db.items() if id_or_title in k]
+    if len(sub_matches) == 1:
+        return sub_matches[0]
+    if len(sub_matches) > 1:
+        raise KeyError(f"Ambiguous partial ID '{id_or_title}': matches {len(sub_matches)} requirements.")
+
     # Title match (case-insensitive)
     title_matches = [v for v in db.values() if v.get("title", "").lower() == id_or_title.lower()]
     if len(title_matches) == 1:
@@ -456,6 +463,27 @@ def delete_requirement(req_id: str, *, confirm: bool = True) -> None:
         json.dump(db, f, indent=2)
 
     print(f"Deleted: {req_id}")
+
+
+def find_by_partial_id(partial: str) -> list[dict]:
+    """Return all requirements whose IDs contain partial as a substring.
+
+    Guarantees: returns a list sorted by created_at descending; returns [] when
+                no IDs contain partial; the search is case-sensitive since IDs
+                are lowercase hexadecimal strings.
+    Assumes: .pofe directory exists.
+    Fails: raises FileNotFoundError if rsdb.json is missing.
+    """
+    rsdb_path = _find_pofe_dir() / "data" / "rsdb.json"
+    if not rsdb_path.exists():
+        raise FileNotFoundError("rsdb.json not found. No requirements stored.")
+
+    with open(rsdb_path) as f:
+        db = json.load(f)
+
+    matches = [v for k, v in db.items() if partial in k]
+    matches.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+    return matches
 
 
 def find_requirements_by_tags(tags: list[str], *, exclude_id: str = "", limit: int = 10) -> list[dict]:

@@ -41,6 +41,51 @@ def cmd_req_create(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def _resolve_requirement(id_input: str) -> dict:
+    """Resolve a requirement by full ID, prefix, substring, or title.
+
+    When the input matches multiple requirements, prints a numbered list and
+    prompts the user to select one interactively.
+
+    Fails: prints error to stderr and exits if no match is found, the selection
+           is invalid, or the operation is cancelled.
+    """
+    from pofe.requirement_store import get_requirement, find_by_partial_id
+
+    try:
+        return get_requirement(id_input)
+    except KeyError as e:
+        if "Ambiguous" not in str(e):
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    try:
+        candidates = find_by_partial_id(id_input)
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if not candidates:
+        print(f"Error: No requirement found for '{id_input}'.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Multiple matches for '{id_input}':")
+    for i, req in enumerate(candidates, 1):
+        print(f"  {i}. [{req['id'][:8]}] {req.get('title', '')}")
+
+    try:
+        choice = input(f"Select (1-{len(candidates)}): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print("\nAborted.", file=sys.stderr)
+        sys.exit(1)
+
+    if not choice.isdigit() or not (1 <= int(choice) <= len(candidates)):
+        print("Invalid selection.", file=sys.stderr)
+        sys.exit(1)
+
+    return candidates[int(choice) - 1]
+
+
 def cmd_req_analyze(args: argparse.Namespace) -> None:
     from pofe.requirement_store import get_requirement, format_as_markdown, find_requirements_by_tags
     from pofe.editor_adapter import open_editor
@@ -50,8 +95,8 @@ def cmd_req_analyze(args: argparse.Namespace) -> None:
     metadata: dict = {}
 
     if args.requirement:
+        req = _resolve_requirement(args.requirement)
         try:
-            req = get_requirement(args.requirement)
             content = format_as_markdown(req)
             metadata["requirement_id"] = req["id"]
         except (FileNotFoundError, KeyError) as e:
@@ -200,13 +245,9 @@ def _format_req_table(reqs: list) -> list[str]:
 
 def cmd_req_edit(args: argparse.Namespace) -> None:
     from pofe.editor_adapter import open_editor
-    from pofe.requirement_store import get_requirement, format_as_markdown, update_requirement, list_all_tags
+    from pofe.requirement_store import format_as_markdown, update_requirement, list_all_tags
 
-    try:
-        req = get_requirement(args.id)
-    except (FileNotFoundError, KeyError) as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+    req = _resolve_requirement(args.id)
 
     try:
         available_tags = [t["name"] for t in list_all_tags()]
@@ -292,11 +333,11 @@ def cmd_tag_delete(args: argparse.Namespace) -> None:
 
 
 def cmd_req_related(args: argparse.Namespace) -> None:
-    from pofe.requirement_store import get_requirement, get_related_requirements
+    from pofe.requirement_store import get_related_requirements
 
+    req = _resolve_requirement(args.id)
     try:
-        req = get_requirement(args.id)
-        related = get_related_requirements(args.id)
+        related = get_related_requirements(req["id"])
     except (FileNotFoundError, KeyError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -318,13 +359,9 @@ def cmd_req_related(args: argparse.Namespace) -> None:
 
 
 def cmd_req_show(args: argparse.Namespace) -> None:
-    from pofe.requirement_store import get_requirement, format_as_markdown
+    from pofe.requirement_store import format_as_markdown
 
-    try:
-        req = get_requirement(args.id)
-    except (FileNotFoundError, KeyError) as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+    req = _resolve_requirement(args.id)
 
     print(f"ID:      {req['id']}")
     print(f"Owner:   {req.get('user', '')}")
@@ -337,8 +374,9 @@ def cmd_req_show(args: argparse.Namespace) -> None:
 def cmd_req_delete(args: argparse.Namespace) -> None:
     from pofe.requirement_store import delete_requirement
 
+    req = _resolve_requirement(args.id)
     try:
-        delete_requirement(args.id, confirm=not args.yes)
+        delete_requirement(req["id"], confirm=not args.yes)
     except (FileNotFoundError, KeyError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
